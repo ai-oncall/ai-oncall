@@ -1,7 +1,10 @@
-import structlog
 import logging
 import sys
+
+import structlog
+
 from .config import config
+
 
 def configure_logging() -> None:
     logging.basicConfig(
@@ -19,7 +22,9 @@ def configure_logging() -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer() if not config.debug else structlog.dev.ConsoleRenderer(colors=True),
+            structlog.processors.JSONRenderer()
+            if not config.debug
+            else structlog.dev.ConsoleRenderer(colors=True),
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -27,8 +32,9 @@ def configure_logging() -> None:
         cache_logger_on_first_use=True,
     )
 
-def get_logger(name: str):
+
+def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
 
+
 configure_logging()
-logger = get_logger(__name__) 
