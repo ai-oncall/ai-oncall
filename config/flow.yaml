@@ -1,0 +1,88 @@
+workflows:
+  # Incident Response Workflow
+  - name: "incident_response"
+    priority: 10
+    enabled: true
+    trigger_conditions:
+      classification_type: "incident"
+      severity: ["high", "critical"]
+    actions:
+      - type: "escalate"
+        params:
+          escalation_level: "urgent"
+          notify_channels: ["#incidents", "#on-call"]
+      - type: "create_ticket"
+        params:
+          system: "jira"
+          priority: "high"
+      - type: "respond"
+        params:
+          template: "incident_acknowledged"
+
+  # Knowledge Base Query Workflow  
+  - name: "knowledge_base_lookup"
+    priority: 5
+    enabled: true
+    trigger_conditions:
+      classification_type: "knowledge_query"
+    actions:
+      - type: "search_kb"
+        params:
+          knowledge_base: "confluence"
+          max_results: 3
+      - type: "respond"
+        params:
+          template: "knowledge_base_results"
+
+  # Support Request Workflow
+  - name: "support_request"
+    priority: 3
+    enabled: true
+    trigger_conditions:
+      classification_type: "support_request"
+      urgency: ["medium", "low"]
+    actions:
+      - type: "create_ticket"
+        params:
+          system: "zendesk"
+          priority: "normal"
+      - type: "respond"
+        params:
+          template: "support_ticket_created"
+
+  # Deployment Help Workflow
+  - name: "deployment_assistance"
+    priority: 2
+    enabled: true
+    trigger_conditions:
+      classification_type: "deployment_help"
+    actions:
+      - type: "fetch_docs"
+        params:
+          doc_type: "deployment_guide"
+      - type: "respond"
+        params:
+          template: "deployment_guidance"
+
+# Response Templates
+response_templates:
+  incident_acknowledged: |
+    🚨 **Incident Acknowledged** 
+    I've escalated this to the on-call team and created a high-priority ticket. 
+    Expected response time: 15 minutes.
+    
+  knowledge_base_results: |
+    📚 **Found relevant information:**
+    {kb_results}
+    
+    Need more help? Feel free to ask!
+    
+  support_ticket_created: |
+    🎫 **Support ticket created:** #{ticket_id}
+    Our team will review and respond within 4 hours.
+    
+  deployment_guidance: |
+    🚀 **Deployment Information:**
+    {deployment_docs}
+    
+    Need specific help with your deployment? Let me know the details! 

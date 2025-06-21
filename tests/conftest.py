@@ -47,6 +47,25 @@ async def mock_channel_adapter():
 
 
 @pytest.fixture
+async def mock_slack_adapter():
+    """Mock Slack adapter for testing."""
+    adapter = AsyncMock()
+    adapter.send_message = AsyncMock(return_value={"ok": True, "ts": "123456789.123"})
+    adapter.receive_event = AsyncMock(return_value={
+        "parsed_context": MessageContext(
+            user_id="U123",
+            channel_id="C456", 
+            channel_type="slack",
+            message_text="test message",
+            is_mention=False
+        ),
+        "is_thread_reply": False
+    })
+    adapter.get_channel_type = MagicMock(return_value="slack")
+    return adapter
+
+
+@pytest.fixture
 async def mock_openai_client():
     """Mock OpenAI client for testing."""
     client = AsyncMock()
@@ -56,4 +75,22 @@ async def mock_openai_client():
             usage=MagicMock(total_tokens=50)
         )
     )
-    return client 
+    return client
+
+
+@pytest.fixture
+def mock_processing_result():
+    """Mock processing result for testing."""
+    return MagicMock(
+        response_sent=True,
+        classification_type="support_request",
+        processing_time_ms=150,
+        workflow_executed=False,
+        workflow_name="",
+        has_context=False,
+        error_occurred=False,
+        error_message="",
+        channel_type="slack",
+        escalation_triggered=False,
+        knowledge_base_used=False
+    ) 
