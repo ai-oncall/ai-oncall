@@ -90,7 +90,6 @@ ai-oncall/
 ├── docs/                          # Already created
 ├── .env.example                   # Environment template
 ├── .gitignore                     # Git ignore patterns
-├── .pre-commit-config.yaml        # Pre-commit hooks
 ├── pyproject.toml                 # Project configuration
 ├── pytest.ini                    # Pytest configuration
 ├── Dockerfile                     # Container configuration
@@ -146,7 +145,6 @@ black = "^23.11.0"
 flake8 = "^6.1.0"
 mypy = "^1.7.0"
 isort = "^5.12.0"
-pre-commit = "^3.5.0"
 httpx = "^0.25.0"
 
 [tool.black]
@@ -498,49 +496,8 @@ async def mock_openai_client():
 ### Task 7: Development Tools Setup
 
 **Files to Create**:
-- `.pre-commit-config.yaml` - Pre-commit hooks
 - `scripts/setup.py` - Development setup script
 - `scripts/lint.py` - Code quality checks
-
-**Pre-commit Configuration**:
-
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: https://github.com/psf/black
-    rev: 23.11.0
-    hooks:
-      - id: black
-        language_version: python3.11
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        args: ["--profile", "black"]
-
-  - repo: https://github.com/pycqa/flake8
-    rev: 6.1.0
-    hooks:
-      - id: flake8
-        additional_dependencies: [flake8-docstrings]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic, types-PyYAML]
-        exclude: ^tests/
-
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
-      - id: check-merge-conflict
-```
 
 ## 🧪 Testing Requirements
 
@@ -628,7 +585,6 @@ CMD ["python", "-m", "src.main"]
 - [ ] All code is formatted (black)
 - [ ] All imports are sorted (isort)
 - [ ] Type hints are complete (mypy)
-- [ ] Pre-commit hooks are working
 
 ### Testing
 - [ ] All tests pass

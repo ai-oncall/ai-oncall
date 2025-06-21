@@ -86,7 +86,6 @@ pytest-cov = "^4.1.0"
 black = "^23.0.0"
 flake8 = "^6.0.0"
 mypy = "^1.5.0"
-pre-commit = "^3.4.0"
 ```
 
 ### Optional Dependencies
