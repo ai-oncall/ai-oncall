@@ -2,9 +2,12 @@
 import time
 import json
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from src.data.models import MessageContext, ProcessingResult
 from src.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from src.channels.channel_interface import ChannelAdapter
 
 logger = get_logger(__name__)
 
@@ -15,8 +18,10 @@ def get_openai_client():
     return OpenAIClient()
 
 
-def get_channel_adapter(channel_type: str):
+def get_channel_adapter(channel_type: str) -> "ChannelAdapter":
     """Get appropriate channel adapter."""
+    from src.channels.channel_interface import ChannelAdapter
+    
     if channel_type == "slack":
         from src.channels.slack_adapter import SlackAdapter
         return SlackAdapter()

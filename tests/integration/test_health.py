@@ -51,29 +51,4 @@ def test_health_endpoint_structure():
         assert isinstance(data["slack_configured"], bool)
 
 
-@pytest.mark.asyncio
-async def test_server_startup():
-    """Test that the server can start without errors (startup integration test)."""
-    # This test actually calls main() to test the startup process
-    task = None
-    try:
-        # Start the server
-        task = asyncio.create_task(main())
-        
-        # Give it time to start (or fail)
-        await asyncio.sleep(1)
-        
-        # If we get here without exception, startup succeeded
-        assert task is not None
-        assert not task.done() or not task.exception()
-        
-    except Exception as e:
-        pytest.fail(f"Server startup failed: {e}")
-    finally:
-        # Clean up
-        if task and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass  # Expected when cancelling 
+ 

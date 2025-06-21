@@ -46,9 +46,9 @@ if config.slack_bot_token and config.slack_signing_secret:
         result = await message_processor.process_message(context)
         
         # Send response
-        if result.response_text:
+        if result.ai_response:
             await say(
-                text=result.response_text,
+                text=result.ai_response,
                 thread_ts=event.get("ts")  # Reply in thread
             )
     
@@ -82,9 +82,9 @@ if config.slack_bot_token and config.slack_signing_secret:
         result = await message_processor.process_message(context)
         
         # Send response
-        if result.response_text:
+        if result.ai_response:
             await say(
-                text=result.response_text,
+                text=result.ai_response,
                 thread_ts=event.get("ts")  # Reply in thread
             )
     
@@ -137,7 +137,7 @@ async def process_message(request: MessageRequest):
         result = await message_processor.process_message(context)
         
         return MessageResponse(
-            response_text=result.response_text,
+            response_text=result.ai_response,
             classification_type=result.classification_type,
             confidence=result.confidence,
             workflow_executed=result.workflow_executed,

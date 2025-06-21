@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
+from src.data.models import MessageContext
 
 class ChannelAdapter(ABC):
     @abstractmethod
-    async def send_message(self, context: Dict[str, Any], message: str) -> None:
+    async def send_message(self, context: MessageContext, message: str) -> Dict[str, Any]:
         """Send a message to the channel."""
         pass
 
