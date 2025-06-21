@@ -1,0 +1,25 @@
+# AI OnCall Bot Configuration
+# Copy this file to .env and update with your values
+# For production, override these values using environment variables in CI/CD
+
+# General Configuration
+DEBUG=false
+LOG_LEVEL=INFO
+PORT=8000
+
+# OpenAI Configuration
+OPENAI_API_KEY=
+OPENAI_BASE_URL=  # Optional: For proxy or alternative APIs
+OPENAI_MODEL=gpt-4
+OPENAI_MAX_TOKENS=150
+OPENAI_TEMPERATURE=0.3
+OPENAI_TIMEOUT=30
+
+# Slack Configuration
+SLACK_BOT_TOKEN=
+SLACK_SIGNING_SECRET=
+SLACK_APP_TOKEN=
+
+# Workflow Configuration
+WORKFLOW_CONFIG_PATH=./config/workflows/
+DEFAULT_WORKFLOW=general 

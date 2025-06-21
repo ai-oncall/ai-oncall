@@ -43,4 +43,37 @@ class WorkflowDefinition(BaseModel):
     trigger_conditions: Dict[str, Any] = Field(..., description="Conditions that trigger this workflow")
     actions: list[Dict[str, Any]] = Field(..., description="Actions to execute")
     priority: int = Field(default=1, description="Workflow priority (higher = more important)")
-    enabled: bool = Field(default=True, description="Whether this workflow is enabled") 
+    enabled: bool = Field(default=True, description="Whether this workflow is enabled")
+
+
+# API Models for direct message processing
+class MessageRequest(BaseModel):
+    """Request model for message processing API."""
+    message: str = Field(..., description="The message text to process", min_length=1)
+    user_id: str = Field(default="api-user", description="User ID (for context)")
+    channel_type: str = Field(default="api", description="Channel type")
+    channel_id: str = Field(default="api-channel", description="Channel ID")
+    include_context: bool = Field(default=False, description="Whether to include conversation context")
+
+
+class MessageResponse(BaseModel):
+    """Response model for message processing API."""
+    success: bool = Field(..., description="Whether the processing was successful")
+    message_id: str = Field(..., description="Unique message identifier")
+    classification: Dict[str, Any] = Field(..., description="AI classification result")
+    response: Optional[str] = Field(None, description="Generated response")
+    processing_time_ms: int = Field(..., description="Processing time in milliseconds")
+    workflow_executed: bool = Field(False, description="Whether a workflow was executed")
+    workflow_name: str = Field("", description="Name of executed workflow")
+    tokens_used: int = Field(0, description="AI tokens consumed")
+    error_message: Optional[str] = Field(None, description="Error message if processing failed")
+
+
+class HealthResponse(BaseModel):
+    """Enhanced health check response model."""
+    status: str
+    version: str
+    debug: bool
+    openai_configured: bool
+    openai_base_url: Optional[str] = None
+    timestamp: datetime 

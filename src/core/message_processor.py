@@ -32,6 +32,63 @@ class MessageProcessor:
     
     def __init__(self):
         self.conversation_context: Dict[str, list] = {}
+    
+    async def process_api_message(self, context: MessageContext) -> ProcessingResult:
+        """Process a message directly through API without channel adapter."""
+        start_time = time.time()
+        message_id = str(uuid.uuid4())
+        
+        try:
+            logger.info("Processing API message", message_id=message_id)
+            
+            # Get AI client
+            ai_client = get_openai_client()
+            
+            # Build conversation context
+            conversation_history = self._get_conversation_context(context)
+            
+            # Classify message with AI
+            classification = await self._classify_message(ai_client, context, conversation_history)
+            
+            # Execute workflow based on classification
+            workflow_result = await self._execute_workflow(classification, context)
+            
+            # Generate response
+            response = await self._generate_response(ai_client, classification, context, workflow_result)
+            
+            # Update conversation context
+            self._update_conversation_context(context, classification, response)
+            
+            processing_time = int((time.time() - start_time) * 1000)
+            
+            return ProcessingResult(
+                message_id=message_id,
+                channel_type=context.channel_type,
+                classification_type=classification.get("type", "unknown"),
+                response_sent=bool(response),  # For API, we always "send" by returning
+                processing_time_ms=processing_time,
+                workflow_executed=workflow_result.get("executed", False),
+                workflow_name=workflow_result.get("name", ""),
+                has_context=len(conversation_history) > 0,
+                escalation_triggered=workflow_result.get("escalation_triggered", False),
+                knowledge_base_used=workflow_result.get("knowledge_base_used", False),
+                ai_response=response,
+                tokens_used=classification.get("tokens_used", 0)
+            )
+            
+        except Exception as e:
+            logger.error("Error processing API message", error=str(e), message_id=message_id)
+            processing_time = int((time.time() - start_time) * 1000)
+            
+            return ProcessingResult(
+                message_id=message_id,
+                channel_type=context.channel_type,
+                classification_type="error",
+                response_sent=False,
+                processing_time_ms=processing_time,
+                error_occurred=True,
+                error_message=str(e)
+            )
         
     async def process_message(self, context: MessageContext) -> ProcessingResult:
         """Process a message through the complete pipeline."""
@@ -44,8 +101,10 @@ class MessageProcessor:
             # Get AI client
             ai_client = get_openai_client()
             
-            # Get channel adapter
-            channel_adapter = get_channel_adapter(context.channel_type)
+            # Get channel adapter (only for non-API channels)
+            channel_adapter = None
+            if context.channel_type not in ["api"]:
+                channel_adapter = get_channel_adapter(context.channel_type)
             
             # Build conversation context
             conversation_history = self._get_conversation_context(context)
@@ -59,7 +118,8 @@ class MessageProcessor:
             # Generate and send response
             response = await self._generate_response(ai_client, classification, context, workflow_result)
             
-            if response:
+            # Send response through channel adapter (if available)
+            if response and channel_adapter:
                 await channel_adapter.send_message(context, response)
             
             # Update conversation context
@@ -71,7 +131,7 @@ class MessageProcessor:
                 message_id=message_id,
                 channel_type=context.channel_type,
                 classification_type=classification.get("type", "unknown"),
-                response_sent=bool(response),
+                response_sent=bool(response and channel_adapter) or (bool(response) and context.channel_type == "api"),
                 processing_time_ms=processing_time,
                 workflow_executed=workflow_result.get("executed", False),
                 workflow_name=workflow_result.get("name", ""),
