@@ -42,7 +42,7 @@ class TestMessageFlow:
         assert result.processing_time_ms >= 0
         
         # Verify AI was called for classification
-        mock_openai_client.chat.completions.create.assert_called_once()
+        mock_openai_client.classify_message.assert_called_once()
         
         # Verify response was sent through Slack adapter
         mock_slack_adapter.send_message.assert_called_once()
@@ -57,11 +57,12 @@ class TestMessageFlow:
         # Arrange
         processor = MessageProcessor()
         
-        # Mock AI classification for workflow trigger
-        mock_openai_client.chat.completions.create.return_value = MagicMock(
+        # Mock AI classification for workflow trigger  
+        mock_openai_client.classify_message.return_value = MagicMock(
             choices=[MagicMock(
                 message=MagicMock(content='{"type": "incident_report", "severity": "high", "category": "system_outage"}')
-            )]
+            )],
+            usage=MagicMock(total_tokens=130)
         )
         
         # Act
@@ -101,9 +102,9 @@ class TestMessageFlow:
         )
         
         # Mock AI responses
-        mock_openai_client.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(message=MagicMock(content='{"type": "support_request", "category": "login"}'))]),
-            MagicMock(choices=[MagicMock(message=MagicMock(content='{"type": "followup", "context": "mobile_app_login"}'))])
+        mock_openai_client.classify_message.side_effect = [
+            MagicMock(choices=[MagicMock(message=MagicMock(content='{"type": "support_request", "category": "login"}'))], usage=MagicMock(total_tokens=100)),
+            MagicMock(choices=[MagicMock(message=MagicMock(content='{"type": "followup", "context": "mobile_app_login"}'))], usage=MagicMock(total_tokens=95))
         ]
         
         # Act
@@ -127,7 +128,7 @@ class TestMessageFlow:
         processor = MessageProcessor()
         
         # Mock AI client to raise an exception
-        mock_openai_client.chat.completions.create.side_effect = Exception("OpenAI API Error")
+        mock_openai_client.classify_message.side_effect = Exception("OpenAI API Error")
         
         # Act
         with patch('src.core.message_processor.get_openai_client', return_value=mock_openai_client):
@@ -159,8 +160,9 @@ class TestMessageFlow:
         )
         
         # Mock AI response
-        mock_openai_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content='{"type": "deployment_help", "urgency": "low"}'))]
+        mock_openai_client.classify_message.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content='{"type": "deployment_help", "urgency": "low"}'))],
+            usage=MagicMock(total_tokens=110)
         )
         
         # Act
@@ -240,10 +242,11 @@ class TestWorkflowIntegration:
         )
         
         # Mock AI classification for incident
-        mock_openai_client.chat.completions.create.return_value = MagicMock(
+        mock_openai_client.classify_message.return_value = MagicMock(
             choices=[MagicMock(
                 message=MagicMock(content='{"type": "incident", "severity": "critical", "category": "database"}')
-            )]
+            )],
+            usage=MagicMock(total_tokens=140)
         )
         
         # Act
@@ -268,10 +271,11 @@ class TestWorkflowIntegration:
         )
         
         # Mock AI classification for knowledge base query
-        mock_openai_client.chat.completions.create.return_value = MagicMock(
+        mock_openai_client.classify_message.return_value = MagicMock(
             choices=[MagicMock(
                 message=MagicMock(content='{"type": "knowledge_query", "category": "password_reset"}')
-            )]
+            )],
+            usage=MagicMock(total_tokens=105)
         )
         
         # Act

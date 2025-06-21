@@ -21,7 +21,7 @@ def test_app_config_custom_values():
 def test_app_config_dict():
     """Test AppConfig can be converted to dict."""
     config = AppConfig()
-    config_dict = config.dict()
+    config_dict = config.model_dump()
     
     assert isinstance(config_dict, dict)
     assert "debug" in config_dict

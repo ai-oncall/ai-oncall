@@ -21,8 +21,8 @@ def get_channel_adapter(channel_type: str):
         from src.channels.slack_adapter import SlackAdapter
         return SlackAdapter()
     elif channel_type == "teams":
-        # Future implementation
-        raise NotImplementedError(f"Channel type {channel_type} not yet implemented")
+        from src.channels.teams_adapter import TeamsAdapter
+        return TeamsAdapter()
     else:
         raise ValueError(f"Unsupported channel type: {channel_type}")
 
@@ -156,13 +156,15 @@ class MessageProcessor:
     async def _execute_workflow(self, classification: Dict[str, Any], context: MessageContext) -> Dict[str, Any]:
         """Execute workflow based on classification."""
         workflow_type = classification.get("type", "general_inquiry")
+        severity = classification.get("severity", "low")
+        urgency = classification.get("urgency", "low")
         
         # Mock workflow execution based on type
-        if workflow_type == "incident":
+        if workflow_type in ["incident", "incident_report"]:
             return {
                 "executed": True,
                 "name": "incident_response",
-                "escalation_triggered": classification.get("urgency") in ["high", "critical"],
+                "escalation_triggered": severity in ["high", "critical"] or urgency in ["high", "critical"],
                 "actions_taken": ["escalate", "create_ticket"]
             }
         elif workflow_type == "knowledge_query":
