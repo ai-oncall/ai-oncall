@@ -5,6 +5,7 @@ import uuid
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from src.data.models import MessageContext, ProcessingResult
 from src.utils.logging import get_logger
+from src.ai.openai_client import OpenAIClient
 
 if TYPE_CHECKING:
     from src.channels.channel_interface import ChannelAdapter
@@ -36,129 +37,65 @@ class MessageProcessor:
     """Processes messages from different channels through AI and workflows."""
     
     def __init__(self):
+        """Initialize processor with necessary components."""
+        logger.info("Initializing MessageProcessor")
+        self._openai_client = OpenAIClient()
         self.conversation_context: Dict[str, list] = {}
     
     async def process_api_message(self, context: MessageContext) -> ProcessingResult:
-        """Process a message directly through API without channel adapter."""
-        start_time = time.time()
-        message_id = str(uuid.uuid4())
-        
-        try:
-            logger.info("Processing API message", message_id=message_id)
-            
-            # Get AI client
-            ai_client = get_openai_client()
-            
-            # Build conversation context
-            conversation_history = self._get_conversation_context(context)
-            
-            # Classify message with AI
-            classification = await self._classify_message(ai_client, context, conversation_history)
-            
-            # Execute workflow based on classification
-            workflow_result = await self._execute_workflow(classification, context)
-            
-            # Generate response
-            response = await self._generate_response(ai_client, classification, context, workflow_result)
-            
-            # Update conversation context
-            self._update_conversation_context(context, classification, response)
-            
-            processing_time = int((time.time() - start_time) * 1000)
-            
-            return ProcessingResult(
-                message_id=message_id,
-                channel_type=context.channel_type,
-                classification_type=classification.get("type", "unknown"),
-                response_sent=bool(response),  # For API, we always "send" by returning
-                processing_time_ms=processing_time,
-                workflow_executed=workflow_result.get("executed", False),
-                workflow_name=workflow_result.get("name", ""),
-                has_context=len(conversation_history) > 0,
-                escalation_triggered=workflow_result.get("escalation_triggered", False),
-                knowledge_base_used=workflow_result.get("knowledge_base_used", False),
-                ai_response=response,
-                tokens_used=classification.get("tokens_used", 0)
-            )
-            
-        except Exception as e:
-            logger.error("Error processing API message", error=str(e), message_id=message_id)
-            processing_time = int((time.time() - start_time) * 1000)
-            
-            return ProcessingResult(
-                message_id=message_id,
-                channel_type=context.channel_type,
-                classification_type="error",
-                response_sent=False,
-                processing_time_ms=processing_time,
-                error_occurred=True,
-                error_message=str(e)
-            )
-        
+        """Process a message from the API endpoint."""
+        logger.info("Processing API message",
+                   channel_type=context.channel_type,
+                   channel_id=context.channel_id,
+                   user_id=context.user_id)
+        return await self.process_message(context)
+    
     async def process_message(self, context: MessageContext) -> ProcessingResult:
-        """Process a message through the complete pipeline."""
+        """Process a message from any channel."""
         start_time = time.time()
         message_id = str(uuid.uuid4())
         
         try:
-            logger.info("Processing message", message_id=message_id, channel_type=context.channel_type)
-            
-            # Get AI client
-            ai_client = get_openai_client()
-            
-            # Get channel adapter (only for non-API channels)
-            channel_adapter = None
-            if context.channel_type not in ["api"]:
-                channel_adapter = get_channel_adapter(context.channel_type)
-            
-            # Build conversation context
-            conversation_history = self._get_conversation_context(context)
-            
-            # Classify message with AI
-            classification = await self._classify_message(ai_client, context, conversation_history)
-            
-            # Execute workflow based on classification
-            workflow_result = await self._execute_workflow(classification, context)
-            
-            # Generate and send response
-            response = await self._generate_response(ai_client, classification, context, workflow_result)
-            
-            # Send response through channel adapter (if available)
-            if response and channel_adapter:
-                await channel_adapter.send_message(context, response)
-            
-            # Update conversation context
-            self._update_conversation_context(context, classification, response)
-            
-            processing_time = int((time.time() - start_time) * 1000)
-            
-            return ProcessingResult(
-                message_id=message_id,
-                channel_type=context.channel_type,
-                classification_type=classification.get("type", "unknown"),
-                response_sent=bool(response and channel_adapter) or (bool(response) and context.channel_type == "api"),
-                processing_time_ms=processing_time,
-                workflow_executed=workflow_result.get("executed", False),
-                workflow_name=workflow_result.get("name", ""),
-                has_context=len(conversation_history) > 0,
-                escalation_triggered=workflow_result.get("escalation_triggered", False),
-                knowledge_base_used=workflow_result.get("knowledge_base_used", False),
-                ai_response=response,
-                tokens_used=classification.get("tokens_used", 0)
+            logger.info("Starting message processing",
+                       channel_type=context.channel_type,
+                       channel_id=context.channel_id,
+                       user_id=context.user_id,
+                       is_mention=context.is_mention,
+                       thread_ts=context.thread_ts)
+
+            # Classify message intent
+            classification = await self._openai_client.classify_message(context.message_text)
+            logger.info("Message classified",
+                       type=classification.get("type", "unknown"),
+                       severity=classification.get("severity", "unknown"))
+
+            # Generate response based on classification
+            response = await self._openai_client.generate_response(
+                context.message_text,
+                {"classification": classification}
             )
             
-        except Exception as e:
-            logger.error("Error processing message", error=str(e), message_id=message_id)
-            processing_time = int((time.time() - start_time) * 1000)
-            
+            logger.info("Response generated",
+                       response_length=len(response) if response else 0,
+                       channel_id=context.channel_id,
+                       thread_ts=context.thread_ts)
+
             return ProcessingResult(
-                message_id=message_id,
-                channel_type=context.channel_type,
-                classification_type="error",
-                response_sent=False,
-                processing_time_ms=processing_time,
-                error_occurred=True,
-                error_message=str(e)
+                response=response,
+                classification=classification.get("type", "unknown"),
+                confidence=1.0,  # We'll implement confidence scoring later
+                workflow_executed=True if classification.get("type") == "incident" else False
+            )
+        except Exception as e:
+            logger.exception("Error processing message",
+                           channel_type=context.channel_type,
+                           channel_id=context.channel_id,
+                           error=str(e))
+            return ProcessingResult(
+                response="I apologize, but I encountered an error processing your request.",
+                classification="error",
+                confidence=0.0,
+                workflow_executed=False
             )
     
     def _get_conversation_context(self, context: MessageContext) -> list:
@@ -287,4 +224,4 @@ class MessageProcessor:
         
         # Keep only last 10 messages per conversation
         if len(self.conversation_context[key]) > 10:
-            self.conversation_context[key] = self.conversation_context[key][-10:] 
+            self.conversation_context[key] = self.conversation_context[key][-10:]

@@ -68,7 +68,6 @@ poetry.lock
 
 # dotenv
 .env
-.env.*
 
 # Docker
 *.log

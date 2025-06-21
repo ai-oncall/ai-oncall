@@ -18,7 +18,7 @@ class AppConfig(BaseSettings):
     slack_signing_secret: str = ""
     slack_app_token: str = ""
     slack_socket_mode: bool = False
-    
+    slack_channel_id: str = ""
     # Workflow Configuration
     workflow_config_path: str = "./config/workflows/"
     default_workflow: str = "general"
@@ -26,5 +26,6 @@ class AppConfig(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
-config = AppConfig() 
+config = AppConfig()

@@ -1,12 +1,16 @@
+"""Main application entry point."""
 import asyncio
+import uuid
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
 from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from src.utils.config import config
 from src.utils.logging import get_logger
 from src.data.models import MessageRequest, MessageResponse, HealthResponse, MessageContext
 from src.core.message_processor import MessageProcessor
+from src.channels.slack_adapter import SlackAdapter
 
 logger = get_logger(__name__)
 
@@ -16,82 +20,25 @@ message_processor = MessageProcessor()
 # Initialize Slack app if credentials are configured
 slack_app: AsyncApp | None = None
 slack_handler: AsyncSlackRequestHandler | None = None
+slack_adapter: SlackAdapter | None = None
 
-if config.slack_bot_token and config.slack_signing_secret:
+if config.slack_bot_token:
+    logger.info("Initializing Slack app", 
+                socket_mode=config.slack_socket_mode,
+                channel_id=config.slack_channel_id)
+    
     slack_app = AsyncApp(
         token=config.slack_bot_token,
-        signing_secret=config.slack_signing_secret,
-        process_before_response=True,
+        signing_secret=config.slack_signing_secret if config.slack_signing_secret else None,
+        process_before_response=True
     )
     
-    # Set up Slack event handlers
-    @slack_app.event("app_mention")
-    async def handle_app_mention(event, say, ack):
-        """Handle @bot mentions."""
-        await ack()
-        logger.info("App mention received", user=event["user"], channel=event["channel"])
-        
-        # Create message context
-        context = MessageContext(
-            user_id=event["user"],
-            channel_id=event["channel"],
-            channel_type="slack",
-            message_text=event["text"],
-            thread_ts=event.get("thread_ts"),
-            is_mention=True,
-            metadata={"ts": event["ts"], "event_type": "app_mention"}
-        )
-        
-        # Process message
-        result = await message_processor.process_message(context)
-        
-        # Send response
-        if result.ai_response:
-            await say(
-                text=result.ai_response,
-                thread_ts=event.get("ts")  # Reply in thread
-            )
+    if not config.slack_socket_mode:
+        slack_handler = AsyncSlackRequestHandler(slack_app)
     
-    @slack_app.event("message")
-    async def handle_message(event, say, ack):
-        """Handle direct messages to the bot."""
-        await ack()
-        
-        # Skip bot messages and threaded messages that aren't mentions
-        if event.get("subtype") == "bot_message" or event.get("bot_id"):
-            return
-            
-        # Only respond to DMs or if bot is mentioned
-        if event.get("channel_type") != "im" and "<@" not in event.get("text", ""):
-            return
-            
-        logger.info("Message received", user=event["user"], channel=event["channel"])
-        
-        # Create message context
-        context = MessageContext(
-            user_id=event["user"],
-            channel_id=event["channel"],
-            channel_type="slack",
-            message_text=event["text"],
-            thread_ts=event.get("thread_ts"),
-            is_mention="<@" in event.get("text", ""),
-            metadata={"ts": event["ts"], "event_type": "message"}
-        )
-        
-        # Process message
-        result = await message_processor.process_message(context)
-        
-        # Send response
-        if result.ai_response:
-            await say(
-                text=result.ai_response,
-                thread_ts=event.get("ts")  # Reply in thread
-            )
-    
-    slack_handler = AsyncSlackRequestHandler(slack_app)
-    logger.info("Slack bot initialized successfully")
+    slack_adapter = SlackAdapter()
 else:
-    logger.warning("Slack credentials not configured - Slack integration disabled")
+    logger.warning("Slack credentials not configured, Slack integration will be disabled")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -120,63 +67,71 @@ async def health_check():
 
 @app.post("/process-message", response_model=MessageResponse)
 async def process_message(request: MessageRequest):
-    """Process a message from any channel."""
+    """Process an incoming message from any channel."""
+    logger.info("Processing message request", channel_type=request.channel_type)
+    
+    context = MessageContext(
+        user_id=request.user_id,
+        channel_id=request.channel_id,
+        channel_type=request.channel_type,
+        message_text=request.message_text,
+        thread_ts=request.thread_ts,
+        is_mention=request.is_mention,
+        timestamp=datetime.now()
+    )
+    
     try:
-        # Create message context
-        context = MessageContext(
-            user_id=request.user_id,
-            channel_id=request.channel_id,
-            channel_type=request.channel_type,
-            message_text=request.message,
-            thread_ts=request.thread_ts,
-            is_mention=request.is_mention,
-            metadata=request.metadata or {}
-        )
-        
-        # Process the message
         result = await message_processor.process_message(context)
-        
         return MessageResponse(
-            response_text=result.ai_response,
-            classification_type=result.classification_type,
+            status="success",
+            message_id=str(uuid.uuid4()),
+            response=result.response,
             confidence=result.confidence,
-            workflow_executed=result.workflow_executed,
-            escalation_triggered=result.escalation_triggered,
-            processing_time_ms=result.processing_time_ms,
-            response_sent=result.response_sent,
-            error_occurred=result.error_occurred,
-            error_message=result.error_message
+            workflow_executed=result.workflow_name if result.workflow_executed else None
         )
-        
     except Exception as e:
-        logger.error("Error processing message", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
+        logger.exception("Error processing message")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Slack webhook endpoint
 if slack_handler:
     @app.post("/slack/events")
-    async def slack_events(request):
-        """Handle Slack events."""
-        if slack_handler is None:
-            raise HTTPException(status_code=503, detail="Slack not configured")
+    async def handle_slack_events(request: Request):
+        """Handle incoming Slack events."""
         return await slack_handler.handle(request)
 
 async def main():
     """Main application entry point."""
     logger.info("Starting AI OnCall Bot", config_debug=config.debug)
+
+    tasks = []
     
-    # Socket Mode for development
-    if slack_app is not None and config.slack_socket_mode:
-        logger.info("Starting Slack app in Socket Mode")
-        await slack_app.start()  # type: ignore
-        return
-    
-    # HTTP mode for production
-    logger.info(f"Starting HTTP server on port {config.port}")
-    import uvicorn
-    config_server = uvicorn.Config(app, host="0.0.0.0", port=config.port)
+    # Start Slack Socket Mode if enabled
+    if slack_adapter and config.slack_socket_mode:
+        if not config.slack_app_token:
+            logger.error("Socket Mode enabled but SLACK_APP_TOKEN is missing")
+            raise ValueError("SLACK_APP_TOKEN is required for Socket Mode")
+            
+        logger.info("Starting Slack Socket Mode listener in background task")
+        tasks.append(asyncio.create_task(slack_adapter.start_socket_mode(message_processor)))
+    elif slack_adapter:
+        logger.info("Running in HTTP webhook mode")
+
+    # Start FastAPI server
+    config_server = uvicorn.Config(
+        app, 
+        host="0.0.0.0", 
+        port=config.port,
+        log_level=config.log_level.lower()
+    )
     server = uvicorn.Server(config_server)
-    await server.serve()
+    tasks.append(asyncio.create_task(server.serve()))
+
+    try:
+        await asyncio.gather(*tasks)
+    except Exception as e:
+        logger.exception("Error in main execution", error=str(e))
+        raise
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

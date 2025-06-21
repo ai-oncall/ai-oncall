@@ -1,141 +1,103 @@
 """OpenAI client wrapper for AI processing."""
-import json
-import asyncio
 from typing import Any, Dict, Optional
+import json
 from openai import AsyncOpenAI
 from src.utils.config import config
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-
 class OpenAIClient:
     """Wrapper for OpenAI API interactions."""
     
     def __init__(self):
         """Initialize the OpenAI client."""
+        self._client = None
         if not config.openai_api_key:
-            logger.warning("OpenAI API key not configured - using mock responses")
-            self._client = None
+            logger.warning("OpenAI API key not configured, using mock responses")
         else:
-            # Configure client with optional base URL for proxy/alternative APIs
-            client_kwargs = {
-                "api_key": config.openai_api_key,
-                "timeout": config.openai_timeout
-            }
-            
-            if config.openai_base_url:
-                client_kwargs["base_url"] = config.openai_base_url
-                logger.info("Using custom OpenAI base URL", base_url=config.openai_base_url)
-            
-            self._client = AsyncOpenAI(**client_kwargs)
+            logger.info("Using custom OpenAI base URL", base_url=config.openai_base_url)
+            self._client = AsyncOpenAI(
+                api_key=config.openai_api_key,
+                base_url=config.openai_base_url,
+                max_retries=2,
+                timeout=config.openai_timeout
+            )
             logger.info("OpenAI client initialized", 
                        model=config.openai_model,
-                       base_url=config.openai_base_url or "default")
+                       base_url=config.openai_base_url)
     
-    async def classify_message(self, prompt: str) -> Any:
+    async def classify_message(self, prompt: str) -> Dict[str, str]:
         """Classify a message using OpenAI."""
         logger.info("Classifying message with AI", model=config.openai_model)
         
         if not self._client:
-            logger.warning("OpenAI client not configured - returning mock response")
+            logger.warning("OpenAI client not initialized, using mock response")
             return self._get_mock_classification_response()
         
         try:
-            response = await self._client.chat.completions.create(
+            completion = await self._client.chat.completions.create(
                 model=config.openai_model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an AI assistant that classifies support messages. Respond only with valid JSON containing the classification information."
-                    },
-                    {
-                        "role": "user", 
-                        "content": prompt
-                    }
-                ],
-                max_tokens=config.openai_max_tokens,
-                temperature=config.openai_temperature,
-                response_format={"type": "json_object"}
-            )
-            
-            logger.info("Message classified successfully", 
-                       tokens_used=response.usage.total_tokens if response.usage else 0,
-                       model=response.model)
-            
-            return response
-            
-        except Exception as e:
-            logger.error("OpenAI classification failed", error=str(e))
-            # Return mock response as fallback
-            return self._get_mock_classification_response()
-    
-    async def generate_response(self, prompt: str, context: Optional[Dict] = None) -> Any:
-        """Generate a response using OpenAI."""
-        logger.info("Generating response with AI", model=config.openai_model)
-        
-        if not self._client:
-            logger.warning("OpenAI client not configured - returning mock response")
-            return self._get_mock_response_generation()
-        
-        try:
-            # Build context-aware prompt
-            system_message = """You are a helpful AI assistant for technical support. 
-            Provide clear, concise, and actionable responses. Keep responses professional but friendly."""
-            
-            if context:
-                system_message += f"\n\nContext: {json.dumps(context, indent=2)}"
-            
-            response = await self._client.chat.completions.create(
-                model=config.openai_model,
-                messages=[
-                    {"role": "system", "content": system_message},
+                    {"role": "system", "content": "You are a message classifier. Classify the message into a JSON object with two fields: 'type' (one of: incident, knowledge_query, support_request, deployment_assistance) and 'severity' (one of: low, medium, high, critical) if type is incident."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=config.openai_max_tokens * 2,  # Allow more tokens for responses
-                temperature=config.openai_temperature
+                temperature=config.openai_temperature,
+                max_tokens=config.openai_max_tokens
             )
             
-            logger.info("Response generated successfully",
-                       tokens_used=response.usage.total_tokens if response.usage else 0,
-                       model=response.model)
+            # Extract the classification from the response
+            classification_text = completion.choices[0].message.content
+            logger.info("Message classified successfully",
+                       tokens_used=completion.usage.total_tokens,
+                       model=completion.model)
             
-            return response
+            try:
+                # Parse the JSON response
+                classification = json.loads(classification_text)
+                return classification
+            except json.JSONDecodeError:
+                logger.error("Failed to parse classification JSON", text=classification_text)
+                return {"type": "unknown", "severity": "unknown"}
             
         except Exception as e:
-            logger.error("OpenAI response generation failed", error=str(e))
-            # Return mock response as fallback
+            logger.exception("Error classifying message", error=str(e))
+            return {"type": "unknown", "severity": "unknown"}
+    
+    async def generate_response(self, prompt: str, context: Optional[Dict] = None) -> str:
+        """Generate a response using OpenAI."""
+        if not self._client:
             return self._get_mock_response_generation()
+            
+        try:
+            messages = [
+                {"role": "system", "content": "You are an AI support assistant. Provide helpful and concise responses."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            if context:
+                messages.insert(1, {"role": "system", "content": f"Context: {json.dumps(context)}"})
+            
+            completion = await self._client.chat.completions.create(
+                model=config.openai_model,
+                messages=messages,
+                temperature=config.openai_temperature,
+                max_tokens=config.openai_max_tokens
+            )
+            
+            return completion.choices[0].message.content
+            
+        except Exception as e:
+            logger.exception("Error generating response", error=str(e))
+            return "I apologize, but I'm having trouble processing your request right now."
     
-    def _get_mock_classification_response(self) -> Any:
-        """Get mock classification response for testing/fallback."""
-        from unittest.mock import MagicMock
-        
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = json.dumps({
+    def _get_mock_classification_response(self) -> Dict[str, str]:
+        """Get a mock classification response for testing."""
+        return {
             "type": "support_request",
-            "urgency": "medium", 
-            "category": "general",
-            "confidence": 0.8
-        })
-        mock_response.usage = MagicMock()
-        mock_response.usage.total_tokens = 120
-        mock_response.model = "mock-model"
-        
-        return mock_response
+            "severity": "low"
+        }
     
-    def _get_mock_response_generation(self) -> Any:
-        """Get mock response generation for testing/fallback."""
-        from unittest.mock import MagicMock
-        
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = "I'll help you with that request. Let me look into this for you."
-        mock_response.usage = MagicMock()
-        mock_response.usage.total_tokens = 85
-        mock_response.model = "mock-model"
-        
-        return mock_response 
+    def _get_mock_response_generation(self) -> str:
+        """Get a mock response for testing."""
+        return "I understand your request. How can I help you further?"
