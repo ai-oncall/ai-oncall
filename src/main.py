@@ -26,13 +26,13 @@ async def root():
     """Root endpoint."""
     return {"message": "AI OnCall Bot - Multi-channel assistant"}
 
-async def main():
+def main():
     """Main application entry point."""
-    logger.info("Starting AI OnCall Bot", config=config.dict())
+    logger.info("Starting AI OnCall Bot", config=config.model_dump())
     
-    # For now, just start the FastAPI server
+    # Start the FastAPI server
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=config.port)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 
