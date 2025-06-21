@@ -1,7 +1,7 @@
 """Tests for channel adapter interface."""
 import pytest
 from abc import ABC
-from src.channels.base import ChannelAdapter
+from src.channels.channel_interface import ChannelAdapter
 
 
 def test_channel_adapter_is_abstract():
