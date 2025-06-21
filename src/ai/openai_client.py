@@ -39,11 +39,18 @@ class OpenAIClient:
             completion = await self._client.chat.completions.create(
                 model=config.openai_model,
                 messages=[
-                    {"role": "system", "content": "You are a message classifier. Classify the message into a JSON object with two fields: 'type' (one of: incident, knowledge_query, support_request, deployment_assistance) and 'severity' (one of: low, medium, high, critical) if type is incident."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an AI assistant that classifies support messages. Respond only with valid JSON containing the classification information."
+                    },
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
                 ],
+                max_tokens=config.openai_max_tokens,
                 temperature=config.openai_temperature,
-                max_tokens=config.openai_max_tokens
+                response_format={"type": "json_object"}
             )
             
             # Extract the classification from the response
