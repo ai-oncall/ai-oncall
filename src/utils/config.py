@@ -17,6 +17,7 @@ class AppConfig(BaseSettings):
     slack_bot_token: str = ""
     slack_signing_secret: str = ""
     slack_app_token: str = ""
+    slack_socket_mode: bool = False
     
     # Workflow Configuration
     workflow_config_path: str = "./config/workflows/"

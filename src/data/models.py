@@ -23,6 +23,8 @@ class ProcessingResult(BaseModel):
     message_id: str = Field(..., description="Unique identifier for the processed message")
     channel_type: str = Field(..., description="Type of channel the message came from")
     classification_type: str = Field(..., description="AI classification of the message")
+    response_text: Optional[str] = Field(default=None, description="Generated response text")
+    confidence: float = Field(default=0.0, description="Classification confidence score")
     response_sent: bool = Field(default=False, description="Whether a response was sent")
     processing_time_ms: int = Field(default=0, description="Processing time in milliseconds")
     workflow_executed: bool = Field(default=False, description="Whether a workflow was executed")
@@ -53,19 +55,22 @@ class MessageRequest(BaseModel):
     user_id: str = Field(default="api-user", description="User ID (for context)")
     channel_type: str = Field(default="api", description="Channel type")
     channel_id: str = Field(default="api-channel", description="Channel ID")
+    thread_ts: Optional[str] = Field(default=None, description="Thread timestamp")
+    is_mention: bool = Field(default=False, description="Whether this is a mention")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
     include_context: bool = Field(default=False, description="Whether to include conversation context")
 
 
 class MessageResponse(BaseModel):
     """Response model for message processing API."""
-    success: bool = Field(..., description="Whether the processing was successful")
-    message_id: str = Field(..., description="Unique message identifier")
-    classification: Dict[str, Any] = Field(..., description="AI classification result")
-    response: Optional[str] = Field(None, description="Generated response")
-    processing_time_ms: int = Field(..., description="Processing time in milliseconds")
+    response_text: Optional[str] = Field(None, description="Generated response text")
+    classification_type: str = Field(..., description="AI classification type")
+    confidence: float = Field(default=0.0, description="Classification confidence")
     workflow_executed: bool = Field(False, description="Whether a workflow was executed")
-    workflow_name: str = Field("", description="Name of executed workflow")
-    tokens_used: int = Field(0, description="AI tokens consumed")
+    escalation_triggered: bool = Field(False, description="Whether escalation was triggered")
+    processing_time_ms: int = Field(..., description="Processing time in milliseconds")
+    response_sent: bool = Field(False, description="Whether response was sent")
+    error_occurred: bool = Field(False, description="Whether an error occurred")
     error_message: Optional[str] = Field(None, description="Error message if processing failed")
 
 
@@ -76,4 +81,5 @@ class HealthResponse(BaseModel):
     debug: bool
     openai_configured: bool
     openai_base_url: Optional[str] = None
+    slack_configured: bool = False
     timestamp: datetime 

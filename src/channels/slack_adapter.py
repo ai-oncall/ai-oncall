@@ -1,7 +1,9 @@
 """Slack channel adapter implementation."""
 from typing import Dict, Any
+from slack_bolt.app.async_app import AsyncApp
 from src.channels.channel_interface import ChannelAdapter
 from src.data.models import MessageContext
+from src.utils.config import config
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -12,21 +14,52 @@ class SlackAdapter(ChannelAdapter):
     
     def __init__(self):
         """Initialize the Slack adapter."""
-        # In production, this would initialize the Slack Bolt app
-        logger.info("Initializing Slack adapter")
+        if not config.slack_bot_token or not config.slack_signing_secret:
+            logger.warning("Slack credentials not configured - using mock mode")
+            self._client = None
+        else:
+            self._client = AsyncApp(
+                token=config.slack_bot_token,
+                signing_secret=config.slack_signing_secret
+            )
+            logger.info("Slack Bolt client initialized")
     
     async def send_message(self, context: MessageContext, message: str) -> Dict[str, Any]:
         """Send a message to Slack."""
         logger.info("Sending message to Slack", channel_id=context.channel_id)
         
-        # Mock Slack API call for testing
-        # In production, this would use the Slack Bolt client
-        return {
-            "ok": True,
-            "ts": "1234567890.123",
-            "channel": context.channel_id,
-            "message": message
-        }
+        if not self._client:
+            logger.warning("Slack client not configured - returning mock response")
+            return {
+                "ok": True,
+                "ts": "1234567890.123",
+                "channel": context.channel_id,
+                "message": message
+            }
+        
+        try:
+            # Send message to Slack
+            response = await self._client.client.chat_postMessage(
+                channel=context.channel_id,
+                text=message,
+                thread_ts=context.thread_ts  # Reply in thread if this was a thread message
+            )
+            
+            logger.info("Message sent successfully", 
+                       channel=context.channel_id, 
+                       ts=response.get("ts", "unknown"))
+            
+            # Convert response to dict format expected by interface
+            return {
+                "ok": response.get("ok", True),
+                "ts": response.get("ts"),
+                "channel": response.get("channel"),
+                "message": message
+            }
+            
+        except Exception as e:
+            logger.error("Failed to send Slack message", error=str(e), channel=context.channel_id)
+            raise e
     
     async def receive_event(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Process incoming Slack event."""
