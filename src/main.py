@@ -14,8 +14,8 @@ logger = get_logger(__name__)
 message_processor = MessageProcessor()
 
 # Initialize Slack app if credentials are configured
-slack_app = None
-slack_handler = None
+slack_app: AsyncApp | None = None
+slack_handler: AsyncSlackRequestHandler | None = None
 
 if config.slack_bot_token and config.slack_signing_secret:
     slack_app = AsyncApp(
@@ -100,6 +100,11 @@ app = FastAPI(
     version="0.1.0",
 )
 
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {"message": "AI OnCall Bot - Multi-channel assistant"}
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Enhanced health check endpoint."""
@@ -152,21 +157,26 @@ if slack_handler:
     @app.post("/slack/events")
     async def slack_events(request):
         """Handle Slack events."""
+        if slack_handler is None:
+            raise HTTPException(status_code=503, detail="Slack not configured")
         return await slack_handler.handle(request)
 
 async def main():
     """Main application entry point."""
     logger.info("Starting AI OnCall Bot", config_debug=config.debug)
     
-    if slack_app and config.slack_socket_mode:
-        # Use Socket Mode for development
+    # Socket Mode for development
+    if slack_app is not None and config.slack_socket_mode:
         logger.info("Starting Slack app in Socket Mode")
-        await slack_app.start()
-    else:
-        # Use HTTP mode for production
-        logger.info(f"Starting HTTP server on port {config.port}")
-        import uvicorn
-        uvicorn.run(app, host="0.0.0.0", port=config.port)
+        await slack_app.start()  # type: ignore
+        return
+    
+    # HTTP mode for production
+    logger.info(f"Starting HTTP server on port {config.port}")
+    import uvicorn
+    config_server = uvicorn.Config(app, host="0.0.0.0", port=config.port)
+    server = uvicorn.Server(config_server)
+    await server.serve()
 
 if __name__ == "__main__":
     asyncio.run(main()) 
