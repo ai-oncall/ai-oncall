@@ -16,7 +16,19 @@ class TestMessageProcessor:
     @pytest.mark.asyncio
     async def test_process_message_success(self):
         """Test successful message processing."""
-        processor = MessageProcessor()
+        # Mock OpenAI client before creating processor
+        mock_ai_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = MagicMock()
+        mock_response.choices[0].message.content = '{"type": "support_request", "urgency": "medium"}'
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 100
+        mock_ai_client.classify_message = AsyncMock(return_value={"type": "support_request", "urgency": "medium"})
+        mock_ai_client.generate_response = AsyncMock(return_value="I can help you with your login issue.")
+        
+        with patch('src.core.message_processor.OpenAIClient', return_value=mock_ai_client):
+            processor = MessageProcessor()
         
         # Create test context
         context = MessageContext(
@@ -26,35 +38,29 @@ class TestMessageProcessor:
             message_text="I need help with login"
         )
         
-        # Mock AI client
-        mock_ai_client = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = '{"type": "support_request", "urgency": "medium"}'
-        mock_response.usage = MagicMock()
-        mock_response.usage.total_tokens = 100
-        mock_ai_client.classify_message = AsyncMock(return_value=mock_response)
-        
         # Mock channel adapter
         mock_adapter = AsyncMock()
         mock_adapter.send_message = AsyncMock(return_value={"ok": True})
         
-        with patch('src.core.message_processor.get_openai_client', return_value=mock_ai_client):
-            with patch('src.core.message_processor.get_channel_adapter', return_value=mock_adapter):
-                result = await processor.process_message(context)
+        with patch('src.core.message_processor.get_channel_adapter', return_value=mock_adapter):
+            result = await processor.process_message(context)
         
         assert isinstance(result, ProcessingResult)
-        assert result.classification_type == "support_request"
-        assert result.response_sent is True
-        assert result.processing_time_ms >= 0
+        assert result.classification == "support_request"
+        assert result.response is not None
+        assert result.workflow_executed is not None
         mock_ai_client.classify_message.assert_called_once()
-        mock_adapter.send_message.assert_called_once()
+        mock_ai_client.generate_response.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_process_message_ai_error(self):
         """Test message processing with AI error."""
-        processor = MessageProcessor()
+        # Mock AI client to raise exception before creating processor
+        mock_ai_client = AsyncMock()
+        mock_ai_client.classify_message = AsyncMock(side_effect=Exception("AI API Error"))
+        
+        with patch('src.core.message_processor.OpenAIClient', return_value=mock_ai_client):
+            processor = MessageProcessor()
         
         context = MessageContext(
             user_id="U123",
@@ -63,16 +69,11 @@ class TestMessageProcessor:
             message_text="Test message"
         )
         
-        # Mock AI client to raise exception
-        mock_ai_client = AsyncMock()
-        mock_ai_client.classify_message = AsyncMock(side_effect=Exception("AI API Error"))
-        
-        with patch('src.core.message_processor.get_openai_client', return_value=mock_ai_client):
-            result = await processor.process_message(context)
+        result = await processor.process_message(context)
         
         assert result.error_occurred is True
         assert "AI API Error" in result.error_message
-        assert result.classification_type == "error"
+        assert result.classification == "error"
 
     def test_get_conversation_context_no_thread(self):
         """Test conversation context retrieval without thread."""

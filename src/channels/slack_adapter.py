@@ -206,3 +206,19 @@ class SlackAdapter(ChannelAdapter):
         """Check if the message mentions the bot."""
         # Clean up Slack's <@USER_ID> format
         return bool(re.search(r'<@[A-Z0-9]+>', text))
+    
+    def _clean_slack_message(self, text: str) -> str:
+        """Clean Slack-specific formatting from message text."""
+        # Remove user mentions like <@U123456>
+        text = re.sub(r'<@[A-Z0-9]+>', '', text)
+        
+        # Remove channel mentions like <#C123456|general>
+        text = re.sub(r'<#[A-Z0-9]+\|[^>]+>', '', text)
+        
+        # Remove URLs like <http://example.com|example.com>
+        text = re.sub(r'<[^|]+\|([^>]+)>', r'\1', text)
+        
+        # Clean up extra whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text

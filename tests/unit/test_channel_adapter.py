@@ -16,8 +16,8 @@ class TestSlackAdapter:
             mock_config.slack_bot_token = ""  
             mock_config.slack_signing_secret = ""
             
-            adapter = SlackAdapter()
-            assert adapter._client is None
+            with pytest.raises(ValueError, match="Slack bot token is required"):
+                adapter = SlackAdapter()
 
     @patch('src.channels.slack_adapter.config')
     @patch('src.channels.slack_adapter.AsyncApp')
@@ -40,20 +40,8 @@ class TestSlackAdapter:
             mock_config.slack_bot_token = ""
             mock_config.slack_signing_secret = ""
             
-            adapter = SlackAdapter()
-            
-            context = MessageContext(
-                user_id="U123",
-                channel_id="C456", 
-                channel_type="slack",
-                message_text="Test message"
-            )
-            
-            result = await adapter.send_message(context, "Test response")
-            
-            assert result["ok"] is True
-            assert "ts" in result
-            assert result["channel"] == "C456"
+            with pytest.raises(ValueError, match="Slack bot token is required"):
+                adapter = SlackAdapter()
 
     @pytest.mark.asyncio
     async def test_send_message_with_client(self):

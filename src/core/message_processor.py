@@ -95,7 +95,9 @@ class MessageProcessor:
                 response="I apologize, but I encountered an error processing your request.",
                 classification="error",
                 confidence=0.0,
-                workflow_executed=False
+                workflow_executed=False,
+                error_occurred=True,
+                error_message=str(e)
             )
     
     def _get_conversation_context(self, context: MessageContext) -> list:

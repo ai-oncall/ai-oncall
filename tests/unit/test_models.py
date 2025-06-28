@@ -85,27 +85,22 @@ class TestProcessingResult:
     def test_processing_result_creation(self):
         """Test ProcessingResult with required fields."""
         result = ProcessingResult(
-            message_id="msg-123",
-            channel_type="slack",
-            classification_type="support_request"
+            response="I can help you with that request.",
+            classification="support_request"
         )
         
-        assert result.message_id == "msg-123"
-        assert result.channel_type == "slack"
-        assert result.classification_type == "support_request"
-        assert result.response_sent is False
-        assert result.processing_time_ms == 0
+        assert result.response == "I can help you with that request."
+        assert result.classification == "support_request"
+        assert result.confidence == 0.0
         assert result.workflow_executed is False
         assert result.error_occurred is False
 
     def test_processing_result_with_workflow(self):
         """Test ProcessingResult with workflow execution."""
         result = ProcessingResult(
-            message_id="msg-456",
-            channel_type="teams",
-            classification_type="incident",
-            response_sent=True,
-            processing_time_ms=250,
+            response="Incident acknowledged",
+            classification="incident",
+            confidence=0.9,
             workflow_executed=True,
             workflow_name="incident_response",
             escalation_triggered=True,
@@ -118,28 +113,26 @@ class TestProcessingResult:
         assert result.escalation_triggered is True
         assert result.ai_response == "Incident acknowledged"
         assert result.tokens_used == 150
-        assert result.processing_time_ms == 250
+        assert result.confidence == 0.9
 
     def test_processing_result_with_error(self):
         """Test ProcessingResult with error state."""
         result = ProcessingResult(
-            message_id="msg-error",
-            channel_type="slack",
-            classification_type="error",
+            response="I apologize, but I encountered an error processing your request.",
+            classification="error",
             error_occurred=True,
             error_message="AI API unavailable"
         )
         
         assert result.error_occurred is True
         assert result.error_message == "AI API unavailable"
-        assert result.classification_type == "error"
+        assert result.classification == "error"
 
     def test_processing_result_knowledge_base(self):
         """Test ProcessingResult with knowledge base usage."""
         result = ProcessingResult(
-            message_id="msg-kb",
-            channel_type="slack",
-            classification_type="knowledge_query",
+            response="Here's the information from our knowledge base...",
+            classification="knowledge_query",
             workflow_executed=True,
             workflow_name="knowledge_base_lookup",
             knowledge_base_used=True
