@@ -14,6 +14,28 @@ from src.channels.slack_adapter import SlackAdapter
 
 logger = get_logger(__name__)
 
+# Knowledge base initialization
+try:
+    from src.knowledge.kb_manager import KnowledgeBaseManager
+    knowledge_base = KnowledgeBaseManager()
+    
+    # Load documents from knowledge-base folder at startup
+    try:
+        files_processed = knowledge_base.bulk_add_from_directory("knowledge-base")
+        if files_processed > 0:
+            logger.info("Knowledge base initialized successfully", 
+                       files_processed=files_processed,
+                       collection_info=knowledge_base.get_collection_info())
+        else:
+            logger.warning("No documents found in knowledge-base folder")
+    except Exception as e:
+        logger.error("Failed to initialize knowledge base", error=str(e))
+        knowledge_base = None
+        
+except ImportError:
+    logger.warning("ChromaDB not available, knowledge base disabled")
+    knowledge_base = None
+
 # Initialize message processor
 message_processor = MessageProcessor()
 

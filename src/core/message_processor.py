@@ -14,6 +14,15 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# Import knowledge base after logger is defined
+try:
+    from src.knowledge.kb_manager import KnowledgeBaseManager
+    KNOWLEDGE_BASE_AVAILABLE = True
+except ImportError:
+    logger.warning("ChromaDB not available, knowledge base search disabled")
+    KnowledgeBaseManager = None
+    KNOWLEDGE_BASE_AVAILABLE = False
+
 
 def get_openai_client():
     """Get OpenAI client instance."""
@@ -44,6 +53,17 @@ class MessageProcessor:
         self._openai_client = OpenAIClient()
         self.conversation_context: Dict[str, list] = {}
         self._load_workflows()
+        
+        # Initialize knowledge base if available
+        if KNOWLEDGE_BASE_AVAILABLE and KnowledgeBaseManager is not None:
+            try:
+                self.knowledge_base = KnowledgeBaseManager()
+                logger.info("Knowledge base manager initialized in MessageProcessor")
+            except Exception as e:
+                logger.error("Failed to initialize knowledge base manager", error=str(e))
+                self.knowledge_base = None
+        else:
+            self.knowledge_base = None
     
     async def process_api_message(self, context: MessageContext) -> ProcessingResult:
         """Process a message from the API endpoint."""
@@ -77,7 +97,7 @@ class MessageProcessor:
             workflow_result = self._execute_workflow(classification, context)
             
             # Generate response from workflow
-            response = self._generate_workflow_response(workflow_result, classification, context)
+            response = await self._generate_workflow_response(workflow_result, classification, context)
             
             logger.info("Workflow executed and response generated",
                        workflow_name=workflow_result.get("name", "none"),
@@ -247,8 +267,13 @@ class MessageProcessor:
             "template": response_template
         }
     
-    def _generate_workflow_response(self, workflow_result: Dict[str, Any], classification: Dict[str, Any], context: MessageContext) -> str:
+    async def _generate_workflow_response(self, workflow_result: Dict[str, Any], classification: Dict[str, Any], context: MessageContext) -> str:
         """Generate response based on workflow result and templates."""
+        # ALWAYS handle knowledge queries with our custom ChromaDB search - bypass template system
+        if classification.get("type") == "knowledge_query":
+            logger.info("Processing knowledge query with custom search", query=context.message_text)
+            return await self._search_knowledge_base(context.message_text)
+        
         if not workflow_result.get("executed", False):
             # No workflow matched - provide a generic helpful response
             return "I understand your request. How can I help you further?"
@@ -262,9 +287,16 @@ class MessageProcessor:
             elif "support" in workflow_name.lower():
                 return "I've received your support request and will help you resolve it."
             elif "knowledge" in workflow_name.lower():
-                return "Let me search for relevant information to help answer your question."
+                # This should not happen since we handle knowledge queries above
+                logger.warning("Knowledge workflow reached template logic - this should not happen")
+                return await self._search_knowledge_base(context.message_text)
             else:
                 return "I've received your message and am processing your request."
+        
+        # Skip template processing for knowledge queries (double-check)
+        if template_name == "knowledge_base_results":
+            logger.warning("Knowledge base template detected - redirecting to custom search")
+            return await self._search_knowledge_base(context.message_text)
         
         # Get template from configuration
         templates = self.flow_config.get("response_templates", {})
@@ -274,9 +306,63 @@ class MessageProcessor:
             logger.warning("Template not found", template_name=template_name)
             return "I've processed your request. How can I help you further?"
         
-        # TODO: Add template variable substitution here (e.g., {kb_results}, {ticket_id})
-        # For now, return the template as-is
+        # Return template as-is for non-knowledge queries
         return template_content.strip()
+    
+    async def _search_knowledge_base(self, query: str) -> str:
+        """Search knowledge base and generate user-friendly response using OpenAI."""
+        if not self.knowledge_base:
+            logger.warning("Knowledge base not available for search")
+            return "📚 **Knowledge base not available.** Please contact support for assistance."
+        
+        try:
+            # Get collection info for debugging
+            collection_info = self.knowledge_base.get_collection_info()
+            logger.info("Knowledge base search starting", 
+                       query=query,
+                       collection_info=collection_info)
+            
+            # Search ChromaDB - get top match without similarity filtering
+            results = self.knowledge_base.search(query, max_results=3, similarity_threshold=0.0)
+            
+            if not results:
+                logger.warning("No documents found in knowledge base collection", 
+                             query=query,
+                             collection_count=collection_info.get("document_count", 0))
+                return "📚 **No documents available in knowledge base.** Please contact support for assistance."
+            
+            # Format raw results for OpenAI processing
+            response_parts = ["📚 **Found relevant information:**\n"]
+            
+            for result in results:
+                source = result.get("source", "Unknown")
+                content = result.get("content", "")
+                similarity = result.get("similarity", 0)
+                
+                # Truncate content if too long
+                if len(content) > 300:
+                    content = content[:300] + "..."
+                
+                response_parts.append(f"**From: {source}** (similarity: {similarity:.2f})")
+                response_parts.append(content)
+                response_parts.append("")  # Empty line between results
+            
+            response_parts.append("Need more help? Feel free to ask!")
+            raw_knowledge_results = "\n".join(response_parts)
+            
+            # Use OpenAI to generate a user-friendly response
+            formatted_response = await self._openai_client.generate_knowledge_response(query, raw_knowledge_results)
+            
+            logger.info("Knowledge base search and response generation completed", 
+                       query=query,
+                       results_count=len(results),
+                       response_length=len(formatted_response))
+            
+            return formatted_response
+            
+        except Exception as e:
+            logger.error("Error searching knowledge base", query=query, error=str(e))
+            return "📚 **Error searching knowledge base.** Please contact support for assistance."
     
     async def _generate_response(self, ai_client, classification: Dict[str, Any], context: MessageContext, workflow_result: Dict[str, Any]) -> Optional[str]:
         """Generate appropriate response."""

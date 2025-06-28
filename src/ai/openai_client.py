@@ -109,6 +109,72 @@ class OpenAIClient:
             logger.exception("Error generating response", error=str(e))
             return "I apologize, but I'm having trouble processing your request right now."
     
+    async def generate_knowledge_response(self, user_query: str, knowledge_results: str) -> str:
+        """Generate a user-friendly response from knowledge base results using OpenAI."""
+        if not self._client:
+            return self._get_mock_knowledge_response(knowledge_results)
+            
+        try:
+            # Create a prompt to format the knowledge base results nicely
+            system_prompt = """You are a helpful AI assistant. Your task is to take search results from a knowledge base and format them into a clear, helpful response for the user.
+
+Guidelines:
+1. Write in a friendly, professional tone
+2. Extract the most relevant information from the knowledge base results
+3. Format the response in a clear, readable way
+4. Always mention the source document at the end
+5. Be concise but comprehensive
+6. If the information seems incomplete, encourage the user to ask for clarification
+
+Do not include similarity scores or technical metadata in your response."""
+
+            user_prompt = f"""User asked: "{user_query}"
+
+Knowledge base results:
+{knowledge_results}
+
+Please format this into a helpful, user-friendly response. Extract the key information and present it clearly, then mention the source at the bottom."""
+
+            completion = await self._client.chat.completions.create(
+                model=config.openai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,  # Lower temperature for more consistent formatting
+                max_tokens=config.openai_max_tokens
+            )
+
+            response = completion.choices[0].message.content
+            if response:
+                logger.info("Knowledge response generated successfully",
+                           user_query=user_query,
+                           response_length=len(response),
+                           tokens_used=completion.usage.total_tokens if completion.usage else 0)
+                return response
+            else:
+                logger.warning("Empty response from OpenAI for knowledge formatting")
+                return self._get_mock_knowledge_response(knowledge_results)
+                
+        except Exception as e:
+            logger.error("Error generating knowledge response", 
+                        user_query=user_query, 
+                        error=str(e))
+            return self._get_mock_knowledge_response(knowledge_results)
+    
+    def _get_mock_knowledge_response(self, knowledge_results: str) -> str:
+        """Generate a fallback knowledge response when OpenAI is not available."""
+        # Extract source from the knowledge results if possible
+        source = "knowledge base"
+        if "**From:" in knowledge_results:
+            try:
+                source_line = [line for line in knowledge_results.split('\n') if "**From:" in line][0]
+                source = source_line.split("**From:")[1].split("**")[0].strip()
+            except:
+                pass
+        
+        return f"Based on the information in our knowledge base, here's what I found:\n\n{knowledge_results}\n\n📚 *Source: {source}*"
+    
     def _get_mock_classification_response(self) -> Dict[str, str]:
         """Get a mock classification response for testing."""
         return {
