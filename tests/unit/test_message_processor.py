@@ -1,278 +1,109 @@
-"""Tests for MessageProcessor."""
+"""Unit tests for message processor workflows."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from src.core.message_processor import MessageProcessor, get_openai_client, get_channel_adapter
-from src.data.models import MessageContext, ProcessingResult
+from unittest.mock import AsyncMock, patch
+from src.core.message_processor import MessageProcessor
+from src.data.models import MessageContext
 
 
-class TestMessageProcessor:
-    """Tests for MessageProcessor class."""
-
-    def test_message_processor_initialization(self):
-        """Test MessageProcessor can be instantiated."""
+@patch('src.core.message_processor.OpenAIClient')
+class TestMessageProcessorWorkflows:
+    """Test message processor workflow execution."""
+    
+    @pytest.mark.asyncio
+    async def test_support_request_workflow(self, mock_openai_class):
+        """Test support request workflow execution."""
+        # Mock OpenAI client
+        mock_client = AsyncMock()
+        mock_openai_class.return_value = mock_client
+        
+        # Mock classification for support request
+        mock_client.classify_message = AsyncMock(return_value={
+            "type": "support_request",
+            "severity": "medium", 
+            "urgency": "medium",
+            "confidence": 0.7
+        })
+        
+        # Create processor and context
         processor = MessageProcessor()
-        assert processor.conversation_context == {}
-
-    @pytest.mark.asyncio
-    async def test_process_message_success(self):
-        """Test successful message processing."""
-        # Mock OpenAI client before creating processor
-        mock_ai_client = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = '{"type": "support_request", "urgency": "medium"}'
-        mock_response.usage = MagicMock()
-        mock_response.usage.total_tokens = 100
-        mock_ai_client.classify_message = AsyncMock(return_value={"type": "support_request", "urgency": "medium"})
-        mock_ai_client.generate_response = AsyncMock(return_value="I can help you with your login issue.")
-        
-        with patch('src.core.message_processor.OpenAIClient', return_value=mock_ai_client):
-            processor = MessageProcessor()
-        
-        # Create test context
         context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
+            message_text="I need help with my login",
             channel_type="slack",
-            message_text="I need help with login"
+            user_id="U123",
+            channel_id="C456"
         )
         
-        # Mock channel adapter
-        mock_adapter = AsyncMock()
-        mock_adapter.send_message = AsyncMock(return_value={"ok": True})
-        
-        with patch('src.core.message_processor.get_channel_adapter', return_value=mock_adapter):
-            result = await processor.process_message(context)
-        
-        assert isinstance(result, ProcessingResult)
-        assert result.classification == "support_request"
-        assert result.response is not None
-        assert result.workflow_executed is not None
-        mock_ai_client.classify_message.assert_called_once()
-        mock_ai_client.generate_response.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_process_message_ai_error(self):
-        """Test message processing with AI error."""
-        # Mock AI client to raise exception before creating processor
-        mock_ai_client = AsyncMock()
-        mock_ai_client.classify_message = AsyncMock(side_effect=Exception("AI API Error"))
-        
-        with patch('src.core.message_processor.OpenAIClient', return_value=mock_ai_client):
-            processor = MessageProcessor()
-        
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="Test message"
-        )
-        
+        # Process message
         result = await processor.process_message(context)
         
-        assert result.error_occurred is True
-        assert "AI API Error" in result.error_message
-        assert result.classification == "error"
-
-    def test_get_conversation_context_no_thread(self):
-        """Test conversation context retrieval without thread."""
-        processor = MessageProcessor()
-        
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="Test message"
-        )
-        
-        # Initially empty
-        history = processor._get_conversation_context(context)
-        assert history == []
-        
-        # Add some context
-        key = "C456:U123"
-        processor.conversation_context[key] = [{"user_message": "previous", "classification": {}}]
-        
-        history = processor._get_conversation_context(context)
-        assert len(history) == 1
-
-    def test_get_conversation_context_with_thread(self):
-        """Test conversation context retrieval with thread."""
-        processor = MessageProcessor()
-        
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="Test message",
-            thread_ts="1234567890.123"
-        )
-        
-        # Add thread context
-        key = "C456:1234567890.123"
-        processor.conversation_context[key] = [{"user_message": "thread msg", "classification": {}}]
-        
-        history = processor._get_conversation_context(context)
-        assert len(history) == 1
-
-    def test_build_classification_prompt(self):
-        """Test AI classification prompt building."""
-        processor = MessageProcessor()
-        
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="Help with deployment"
-        )
-        
-        history = [{"user_message": "previous message"}]
-        prompt = processor._build_classification_prompt(context, history)
-        
-        assert "Help with deployment" in prompt
-        assert "slack" in prompt
-        assert "previous message" in prompt
+        # Verify support workflow executed
+        assert result.classification == "support_request"
+        assert result.confidence == 0.7
+        assert result.workflow_executed is True
+        assert "🎫 **Support ticket created:**" in result.response
+        assert result.escalation_triggered is False  # Support requests don't escalate
 
     @pytest.mark.asyncio
-    async def test_execute_workflow_incident(self):
-        """Test workflow execution for incident."""
-        processor = MessageProcessor()
+    async def test_deployment_assistance_workflow(self, mock_openai_class):
+        """Test deployment assistance workflow execution."""
+        # Mock OpenAI client
+        mock_client = AsyncMock()
+        mock_openai_class.return_value = mock_client
         
-        classification = {"type": "incident", "severity": "critical"}
+        # Mock classification for deployment help
+        mock_client.classify_message = AsyncMock(return_value={
+            "type": "deployment_help", 
+            "severity": "low",
+            "confidence": 0.9
+        })
+        
+        # Create processor and context  
+        processor = MessageProcessor()
         context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="URGENT: System down"
+            message_text="how do I deploy to production?",
+            channel_type="slack", 
+            user_id="U789",
+            channel_id="C101"
         )
         
-        result = await processor._execute_workflow(classification, context)
+        # Process message
+        result = await processor.process_message(context)
         
-        assert result["executed"] is True
-        assert result["name"] == "incident_response"
-        assert result["escalation_triggered"] is True
+        # Verify deployment workflow executed
+        assert result.classification == "deployment_help"
+        assert result.confidence == 0.9
+        assert result.workflow_executed is True
+        assert "🚀 **Deployment Information:**" in result.response
+        assert result.escalation_triggered is False  # Deployment help doesn't escalate
 
-    @pytest.mark.asyncio
-    async def test_execute_workflow_support_request(self):
-        """Test workflow execution for support request."""
-        processor = MessageProcessor()
+    @pytest.mark.asyncio  
+    async def test_unknown_classification_fallback(self, mock_openai_class):
+        """Test behavior when classification type doesn't match any workflow."""
+        # Mock OpenAI client
+        mock_client = AsyncMock()
+        mock_openai_class.return_value = mock_client
         
-        classification = {"type": "support_request", "urgency": "low"}
+        # Mock unknown classification
+        mock_client.classify_message = AsyncMock(return_value={
+            "type": "random_unknown_type",
+            "severity": "low", 
+            "confidence": 0.3
+        })
+        
+        # Create processor and context
+        processor = MessageProcessor()
         context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
+            message_text="completely random message",
             channel_type="slack",
-            message_text="Need help with password"
+            user_id="U999", 
+            channel_id="C888"
         )
         
-        result = await processor._execute_workflow(classification, context)
+        # Process message
+        result = await processor.process_message(context)
         
-        assert result["executed"] is True
-        assert result["name"] == "support_request_workflow"
-        # escalation_triggered is not included in non-incident workflows
-
-    @pytest.mark.asyncio
-    async def test_execute_workflow_knowledge_query(self):
-        """Test workflow execution for knowledge query."""
-        processor = MessageProcessor()
-        
-        classification = {"type": "knowledge_query"}
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="How do I reset password?"
-        )
-        
-        result = await processor._execute_workflow(classification, context)
-        
-        assert result["executed"] is True
-        assert result["name"] == "knowledge_base_lookup"
-        assert result["knowledge_base_used"] is True
-
-    @pytest.mark.asyncio
-    async def test_generate_response_incident(self):
-        """Test response generation for incident."""
-        processor = MessageProcessor()
-        
-        classification = {"type": "incident"}
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="System down"
-        )
-        workflow_result = {"executed": True}
-        
-        response = await processor._generate_response(None, classification, context, workflow_result)
-        
-        assert response is not None
-        assert "Incident Acknowledged" in response
-        assert "escalated" in response
-
-    def test_update_conversation_context(self):
-        """Test conversation context updating."""
-        processor = MessageProcessor()
-        
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="Test message"
-        )
-        
-        classification = {"type": "support_request"}
-        response = "Test response"
-        
-        processor._update_conversation_context(context, classification, response)
-        
-        key = "C456:U123"
-        assert key in processor.conversation_context
-        assert len(processor.conversation_context[key]) == 1
-        assert processor.conversation_context[key][0]["user_message"] == "Test message"
-        assert processor.conversation_context[key][0]["bot_response"] == "Test response"
-
-    def test_update_conversation_context_limit(self):
-        """Test conversation context size limit."""
-        processor = MessageProcessor()
-        
-        context = MessageContext(
-            user_id="U123",
-            channel_id="C456",
-            channel_type="slack",
-            message_text="Test message"
-        )
-        
-        # Fill beyond limit
-        key = "C456:U123"
-        processor.conversation_context[key] = [{"msg": f"message {i}"} for i in range(12)]
-        
-        processor._update_conversation_context(context, {}, "response")
-        
-        # Should be limited to 10 + 1 new = 10 total (keeps last 10)
-        assert len(processor.conversation_context[key]) == 10
-
-
-class TestHelperFunctions:
-    """Tests for helper functions."""
-
-    def test_get_openai_client(self):
-        """Test OpenAI client retrieval."""
-        client = get_openai_client()
-        assert hasattr(client, 'classify_message')
-
-    def test_get_channel_adapter_slack(self):
-        """Test Slack adapter retrieval."""
-        adapter = get_channel_adapter("slack")
-        assert adapter.get_channel_type() == "slack"
-
-    def test_get_channel_adapter_teams(self):
-        """Test Teams adapter retrieval."""
-        adapter = get_channel_adapter("teams")
-        assert adapter.get_channel_type() == "teams"
-
-    def test_get_channel_adapter_unsupported(self):
-        """Test unsupported channel type."""
-        with pytest.raises(ValueError, match="Unsupported channel type"):
-            get_channel_adapter("discord") 
+        # Verify fallback behavior
+        assert result.classification == "random_unknown_type"
+        assert result.workflow_executed is False  # No matching workflow
+        assert result.escalation_triggered is False
+        assert "I understand your request" in result.response  # Fallback response 

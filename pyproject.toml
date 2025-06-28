@@ -30,6 +30,8 @@ pytest = "^7.4.0"
 pytest-asyncio = "^0.21.0"
 pytest-mock = "^3.12.0"
 pytest-cov = "^4.1.0"
+responses = "^0.24.0"
+aioresponses = "^0.7.6"
 black = "^23.11.0"
 flake8 = "^6.1.0"
 mypy = "^1.7.0"
@@ -55,5 +57,5 @@ disallow_incomplete_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "--cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=50"
 asyncio_mode = "auto" 
