@@ -2,6 +2,8 @@
 import time
 import json
 import uuid
+import yaml
+from pathlib import Path
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from src.data.models import MessageContext, ProcessingResult
 from src.utils.logging import get_logger
@@ -41,6 +43,7 @@ class MessageProcessor:
         logger.info("Initializing MessageProcessor")
         self._openai_client = OpenAIClient()
         self.conversation_context: Dict[str, list] = {}
+        self._load_workflows()
     
     async def process_api_message(self, context: MessageContext) -> ProcessingResult:
         """Process a message from the API endpoint."""
@@ -64,18 +67,20 @@ class MessageProcessor:
                        thread_ts=context.thread_ts)
 
             # Classify message intent
+            logger.info("Classifying message: ", message=context.message_text)
             classification = await self._openai_client.classify_message(context.message_text)
             logger.info("Message classified",
                        type=classification.get("type", "unknown"),
                        severity=classification.get("severity", "unknown"))
 
-            # Generate response based on classification
-            response = await self._openai_client.generate_response(
-                context.message_text,
-                {"classification": classification}
-            )
+            # Find and execute matching workflow
+            workflow_result = self._execute_workflow(classification, context)
             
-            logger.info("Response generated",
+            # Generate response from workflow
+            response = self._generate_workflow_response(workflow_result, classification, context)
+            
+            logger.info("Workflow executed and response generated",
+                       workflow_name=workflow_result.get("name", "none"),
                        response_length=len(response) if response else 0,
                        channel_id=context.channel_id,
                        thread_ts=context.thread_ts)
@@ -83,8 +88,11 @@ class MessageProcessor:
             return ProcessingResult(
                 response=response,
                 classification=classification.get("type", "unknown"),
-                confidence=1.0,  # We'll implement confidence scoring later
-                workflow_executed=True if classification.get("type") == "incident" else False
+                confidence=float(classification.get("confidence", 0.8)),
+                workflow_executed=workflow_result.get("executed", False),
+                workflow_name=workflow_result.get("name", ""),
+                escalation_triggered=workflow_result.get("escalation_triggered", False),
+                knowledge_base_used=workflow_result.get("knowledge_base_used", False)
             )
         except Exception as e:
             logger.exception("Error processing message",
@@ -157,39 +165,118 @@ class MessageProcessor:
         
         return base_prompt.strip()
     
-    async def _execute_workflow(self, classification: Dict[str, Any], context: MessageContext) -> Dict[str, Any]:
+    def _load_workflows(self):
+        """Load workflow definitions from flow.yaml."""
+        try:
+            workflow_file = Path("config/flow.yaml")
+            if workflow_file.exists():
+                with open(workflow_file, 'r') as f:
+                    self.flow_config = yaml.safe_load(f)
+                logger.info("Loaded workflow configuration", 
+                           workflows=len(self.flow_config.get("workflows", [])),
+                           templates=len(self.flow_config.get("response_templates", {})))
+            else:
+                logger.warning("flow.yaml not found, using empty configuration")
+                self.flow_config = {"workflows": [], "response_templates": {}}
+        except Exception as e:
+            logger.error("Error loading workflow configuration", error=str(e))
+            self.flow_config = {"workflows": [], "response_templates": {}}
+    
+    def _execute_workflow(self, classification: Dict[str, Any], context: MessageContext) -> Dict[str, Any]:
         """Execute workflow based on classification."""
-        workflow_type = classification.get("type", "general_inquiry")
+        classification_type = classification.get("type", "unknown")
         severity = classification.get("severity", "low")
-        urgency = classification.get("urgency", "low")
         
-        # Mock workflow execution based on type
-        if workflow_type in ["incident", "incident_report"]:
-            return {
-                "executed": True,
-                "name": "incident_response",
-                "escalation_triggered": severity in ["high", "critical"] or urgency in ["high", "critical"],
-                "actions_taken": ["escalate", "create_ticket"]
-            }
-        elif workflow_type == "knowledge_query":
-            return {
-                "executed": True,
-                "name": "knowledge_base_lookup",
-                "knowledge_base_used": True,
-                "actions_taken": ["search_kb"]
-            }
-        elif workflow_type in ["support_request", "deployment_help"]:
-            return {
-                "executed": True,
-                "name": f"{workflow_type}_workflow",
-                "actions_taken": ["create_ticket", "provide_guidance"]
-            }
-        else:
+        logger.info("Executing workflow", 
+                   classification_type=classification_type, 
+                   severity=severity)
+        
+        # Find matching workflow
+        matching_workflow = None
+        for workflow in self.flow_config.get("workflows", []):
+            if not workflow.get("enabled", True):
+                continue
+                
+            trigger_conditions = workflow.get("trigger_conditions", {})
+            
+            # Check if classification type matches
+            if trigger_conditions.get("classification_type") == classification_type:
+                # Check severity if specified
+                severity_conditions = trigger_conditions.get("severity", [])
+                if not severity_conditions or severity in severity_conditions:
+                    matching_workflow = workflow
+                    break
+        
+        if not matching_workflow:
+            logger.info("No matching workflow found", classification_type=classification_type)
             return {
                 "executed": False,
                 "name": "",
-                "actions_taken": []
+                "actions_taken": [],
+                "template": None
             }
+        
+        # Execute workflow actions
+        actions_taken = []
+        escalation_triggered = False
+        knowledge_base_used = False
+        response_template = None
+        
+        for action in matching_workflow.get("actions", []):
+            action_type = action.get("type")
+            actions_taken.append(action_type)
+            
+            if action_type == "escalate":
+                escalation_triggered = True
+            elif action_type == "search_kb":
+                knowledge_base_used = True
+            elif action_type == "respond":
+                response_template = action.get("params", {}).get("template")
+        
+        logger.info("Workflow executed", 
+                   workflow_name=matching_workflow["name"],
+                   actions_taken=actions_taken,
+                   escalation_triggered=escalation_triggered)
+        
+        return {
+            "executed": True,
+            "name": matching_workflow["name"],
+            "actions_taken": actions_taken,
+            "escalation_triggered": escalation_triggered,
+            "knowledge_base_used": knowledge_base_used,
+            "template": response_template
+        }
+    
+    def _generate_workflow_response(self, workflow_result: Dict[str, Any], classification: Dict[str, Any], context: MessageContext) -> str:
+        """Generate response based on workflow result and templates."""
+        if not workflow_result.get("executed", False):
+            # No workflow matched - provide a generic helpful response
+            return "I understand your request. How can I help you further?"
+        
+        template_name = workflow_result.get("template")
+        if not template_name:
+            # No specific template - provide a generic response based on workflow type
+            workflow_name = workflow_result.get("name", "")
+            if "incident" in workflow_name.lower():
+                return "I've received your incident report and am processing it now."
+            elif "support" in workflow_name.lower():
+                return "I've received your support request and will help you resolve it."
+            elif "knowledge" in workflow_name.lower():
+                return "Let me search for relevant information to help answer your question."
+            else:
+                return "I've received your message and am processing your request."
+        
+        # Get template from configuration
+        templates = self.flow_config.get("response_templates", {})
+        template_content = templates.get(template_name)
+        
+        if not template_content:
+            logger.warning("Template not found", template_name=template_name)
+            return "I've processed your request. How can I help you further?"
+        
+        # TODO: Add template variable substitution here (e.g., {kb_results}, {ticket_id})
+        # For now, return the template as-is
+        return template_content.strip()
     
     async def _generate_response(self, ai_client, classification: Dict[str, Any], context: MessageContext, workflow_result: Dict[str, Any]) -> Optional[str]:
         """Generate appropriate response."""
