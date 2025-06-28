@@ -68,13 +68,14 @@ async def health_check():
 @app.post("/process-message", response_model=MessageResponse)
 async def process_message(request: MessageRequest):
     """Process an incoming message from any channel."""
+    start_time = datetime.now()
     logger.info("Processing message request", channel_type=request.channel_type)
     
     context = MessageContext(
         user_id=request.user_id,
         channel_id=request.channel_id,
         channel_type=request.channel_type,
-        message_text=request.message_text,
+        message_text=request.message,
         thread_ts=request.thread_ts,
         is_mention=request.is_mention,
         timestamp=datetime.now()
@@ -82,23 +83,44 @@ async def process_message(request: MessageRequest):
     
     try:
         result = await message_processor.process_message(context)
+        processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+        
         return MessageResponse(
-            status="success",
-            message_id=str(uuid.uuid4()),
-            response=result.response,
+            response_text=result.response,
+            classification_type=result.classification,
             confidence=result.confidence,
-            workflow_executed=result.workflow_name if result.workflow_executed else None
+            workflow_executed=result.workflow_executed,
+            escalation_triggered=result.escalation_triggered,
+            processing_time_ms=processing_time,
+            response_sent=True,
+            error_occurred=False,
+            error_message=None
         )
     except Exception as e:
+        processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
         logger.exception("Error processing message")
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        return MessageResponse(
+            response_text=f"Error processing message: {str(e)}",
+            classification_type="error",
+            confidence=0.0,
+            workflow_executed=False,
+            escalation_triggered=False,
+            processing_time_ms=processing_time,
+            response_sent=False,
+            error_occurred=True,
+            error_message=str(e)
+        )
 
 # Slack webhook endpoint
 if slack_handler:
     @app.post("/slack/events")
     async def handle_slack_events(request: Request):
         """Handle incoming Slack events."""
-        return await slack_handler.handle(request)
+        if slack_handler is not None:
+            return await slack_handler.handle(request)
+        else:
+            raise HTTPException(status_code=503, detail="Slack handler not available")
 
 async def main():
     """Main application entry point."""
