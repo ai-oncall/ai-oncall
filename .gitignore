@@ -63,9 +63,6 @@ poetry.lock
 # Pyre type checker
 .pyre/
 
-# VS Code
-.vscode/
-
 # dotenv
 .env
 

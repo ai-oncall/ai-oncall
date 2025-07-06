@@ -1,0 +1,90 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug AI OnCall Bot",
+            "type": "python",
+            "request": "launch",
+            "module": "src.main",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "DEBUG": "true",
+                "LOG_LEVEL": "DEBUG"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "Debug AI OnCall Bot (Production Mode)",
+            "type": "python",
+            "request": "launch",
+            "module": "src.main",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "DEBUG": "false",
+                "LOG_LEVEL": "INFO"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": true,
+            "stopOnEntry": false
+        },
+        {
+            "name": "Run Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/",
+                "-v",
+                "--tb=short"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": false
+        },
+        {
+            "name": "Debug Specific Test",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v",
+                "-s"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": false
+        },
+        {
+            "name": "Debug API Message Processing",
+            "type": "python",
+            "request": "launch",
+            "module": "src.main",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "DEBUG": "true",
+                "LOG_LEVEL": "DEBUG",
+                "PORT": "8001"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": false,
+            "stopOnEntry": false
+        }
+    ]
+} 
