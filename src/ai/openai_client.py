@@ -19,7 +19,6 @@ class OpenAIClient:
         if not config.openai_api_key:
             logger.warning("OpenAI API key not configured, using mock responses")
         else:
-            logger.info("Using custom OpenAI base URL", base_url=config.openai_base_url)
             self._client = AsyncOpenAI(
                 api_key=config.openai_api_key,
                 base_url=config.openai_base_url,
@@ -44,7 +43,7 @@ class OpenAIClient:
                 messages=[
                     {
                         "role": "system",
-                        "content": self._build_classification_prompt()
+                        "content": self._build_classification_prompt() + "\nPlease respond with a JSON object containing the classification."
                     },
                     {
                         "role": "user", 
@@ -52,8 +51,7 @@ class OpenAIClient:
                     }
                 ],
                 max_tokens=config.openai_max_tokens,
-                temperature=config.openai_temperature,
-                response_format={"type": "json_object"}
+                temperature=config.openai_temperature
             )
             
             # Extract the classification from the response
@@ -110,58 +108,20 @@ class OpenAIClient:
             return "I apologize, but I'm having trouble processing your request right now."
     
     async def generate_knowledge_response(self, user_query: str, knowledge_results: str) -> str:
-        """Generate a user-friendly response from knowledge base results using OpenAI."""
-        if not self._client:
-            return self._get_mock_knowledge_response(knowledge_results)
-            
-        try:
-            # Create a prompt to format the knowledge base results nicely
-            system_prompt = """You are a helpful AI assistant. Your task is to take search results from a knowledge base and format them into a clear, helpful response for the user.
+        """Generate a helpful response incorporating knowledge base results."""
+        if "No relevant information found" in knowledge_results:
+            return "I couldn't find any specific information about your query in our knowledge base. Can I help with anything else?"
 
-Guidelines:
-1. Write in a friendly, professional tone
-2. Extract the most relevant information from the knowledge base results
-3. Format the response in a clear, readable way
-4. Always mention the source document at the end
-5. Be concise but comprehensive
-6. If the information seems incomplete, encourage the user to ask for clarification
+        prompt = f"""A user asked: '{user_query}'
+        
+        The following information was found in the knowledge base:
+        {knowledge_results}
+        
+        Based on this information, please provide a helpful and concise answer to the user's question.
+        """
+        
+        return await self.generate_response(prompt)
 
-Do not include similarity scores or technical metadata in your response."""
-
-            user_prompt = f"""User asked: "{user_query}"
-
-Knowledge base results:
-{knowledge_results}
-
-Please format this into a helpful, user-friendly response. Extract the key information and present it clearly, then mention the source at the bottom."""
-
-            completion = await self._client.chat.completions.create(
-                model=config.openai_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,  # Lower temperature for more consistent formatting
-                max_tokens=config.openai_max_tokens
-            )
-
-            response = completion.choices[0].message.content
-            if response:
-                logger.info("Knowledge response generated successfully",
-                           user_query=user_query,
-                           response_length=len(response),
-                           tokens_used=completion.usage.total_tokens if completion.usage else 0)
-                return response
-            else:
-                logger.warning("Empty response from OpenAI for knowledge formatting")
-                return self._get_mock_knowledge_response(knowledge_results)
-                
-        except Exception as e:
-            logger.error("Error generating knowledge response", 
-                        user_query=user_query, 
-                        error=str(e))
-            return self._get_mock_knowledge_response(knowledge_results)
-    
     def _get_mock_knowledge_response(self, knowledge_results: str) -> str:
         """Generate a fallback knowledge response when OpenAI is not available."""
         # Extract source from the knowledge results if possible

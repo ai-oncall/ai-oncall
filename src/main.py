@@ -11,30 +11,28 @@ from src.utils.logging import get_logger
 from src.data.models import MessageRequest, MessageResponse, HealthResponse, MessageContext
 from src.core.message_processor import MessageProcessor
 from src.channels.slack_adapter import SlackAdapter
+from src.knowledge.langchain_kb_manager import LangChainKnowledgeManager
 
 logger = get_logger(__name__)
 
-# Knowledge base initialization
+# Initialize LangChain knowledge base
 try:
-    from src.knowledge.kb_manager import KnowledgeBaseManager
-    knowledge_base = KnowledgeBaseManager()
+    knowledge_base = LangChainKnowledgeManager()
+    logger.info("LangChain knowledge base initialized")
     
     # Load documents from knowledge-base folder at startup
-    try:
-        files_processed = knowledge_base.bulk_add_from_directory("knowledge-base")
-        if files_processed > 0:
-            logger.info("Knowledge base initialized successfully", 
-                       files_processed=files_processed,
-                       collection_info=knowledge_base.get_collection_info())
-        else:
-            logger.warning("No documents found in knowledge-base folder")
-    except Exception as e:
-        logger.error("Failed to initialize knowledge base", error=str(e))
-        knowledge_base = None
-        
-except ImportError:
-    logger.warning("ChromaDB not available, knowledge base disabled")
-    knowledge_base = None
+    files_processed = knowledge_base.bulk_add_from_directory("knowledge-base")
+    if files_processed > 0:
+        logger.info("Knowledge base documents loaded successfully", 
+                   files_processed=files_processed,
+                   collection_info=knowledge_base.get_collection_info())
+    else:
+        logger.warning("No documents found in knowledge-base folder")
+
+except Exception as e:
+    error_msg = f"Failed to initialize LangChain knowledge base: {str(e)}"
+    logger.error(error_msg)
+    raise RuntimeError(error_msg)
 
 # Initialize message processor
 message_processor = MessageProcessor()

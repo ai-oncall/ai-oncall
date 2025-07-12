@@ -11,7 +11,7 @@ def configure_logging() -> None:
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, config.log_level.upper(), logging.INFO),
+        level=getattr(logging, config.log_level.upper(), logging.WARNING),
     )
 
     # Configure structlog with timestamp and proper formatting
