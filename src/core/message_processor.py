@@ -10,7 +10,6 @@ from src.data.models import MessageContext, ProcessingResult
 from src.utils.logging import get_logger
 from src.channels.channel_interface import ChannelAdapter
 from src.channels.slack_adapter import SlackAdapter
-from src.channels.teams_adapter import TeamsAdapter
 from src.ai.langchain_client import LangChainAIClient
 from src.knowledge.langchain_kb_manager import LangChainKnowledgeManager
 from src.workflows.langgraph_engine import LangGraphWorkflowEngine
@@ -23,46 +22,31 @@ logger.debug("Test environment check", in_test=IN_TEST)
 
 def get_ai_client():
     """Get LangChain AI client instance."""
-    if IN_TEST:
-        # Mock client for testing
-        from src.ai.openai_client import OpenAIClient
-        return OpenAIClient()
     return LangChainAIClient()
 
 
-def get_channel_adapter(channel_type: str) -> Union[SlackAdapter, TeamsAdapter]:
+def get_channel_adapter(channel_type: str) -> ChannelAdapter:
     """Get appropriate channel adapter."""
     if channel_type == "slack":
         return SlackAdapter()
-    elif channel_type == "teams":
-        return TeamsAdapter()
     else:
         raise ValueError(f"Unsupported channel type: {channel_type}")
 
 
 class MessageProcessor:
-    """Processes messages from different channels through AI and workflows."""
+    """Processes messages through LangChain and LangGraph workflows."""
     
     def __init__(self):
-        """Initialize processor with necessary components."""
-        logger.info("Initializing MessageProcessor with LangChain integration")
+        """Initialize processor with LangChain components."""
+        logger.info("Initializing MessageProcessor with LangChain")
         
-        # Initialize AI client (LangChain or fallback)
-        self._ai_client = get_ai_client()
-        
-        # Initialize workflow engine
+        # Initialize core components
+        self.ai_client = LangChainAIClient()
         self.workflow_engine = LangGraphWorkflowEngine()
+        self.knowledge_base = LangChainKnowledgeManager()
         
-        self.conversation_context: Dict[str, list] = {}
-        self._load_workflows()
-        
-        # Initialize knowledge base if available
-        try:
-            self.knowledge_base = LangChainKnowledgeManager()
-            logger.info("Knowledge base manager initialized in MessageProcessor")
-        except Exception as e:
-            logger.error("Failed to initialize knowledge base manager", error=str(e))
-            self.knowledge_base = None
+        # Initialize conversation tracking
+        self.conversation_context = {}
     
     async def process_api_message(self, context: MessageContext) -> ProcessingResult:
         """Process a message from the API endpoint."""
@@ -71,50 +55,32 @@ class MessageProcessor:
                    channel_id=context.channel_id,
                    user_id=context.user_id)
         return await self.process_message(context)
-    
-    async def process_message(self, context: MessageContext) -> ProcessingResult:
-        """Process a message from any channel."""
-        start_time = time.time()
-        message_id = str(uuid.uuid4())
-        
+     async def process_message(self, context: MessageContext) -> ProcessingResult:
+        """Process a message using LangChain and LangGraph."""
         try:
-            logger.info("Starting message processing",
-                       channel_type=context.channel_type,
-                       channel_id=context.channel_id,
-                       user_id=context.user_id,
-                       is_mention=context.is_mention,
-                       thread_ts=context.thread_ts)
-
-            # Classify message intent using LangChain or fallback
-            logger.info("Classifying message: ", message=context.message_text)
-            classification = await self._ai_client.classify_message(context.message_text)
-            msg_type = classification.get("type", "unknown")
-            msg_confidence = float(classification.get("confidence", 0.0))
-            logger.info("Message classified",
-                       type=msg_type,
-                       confidence=msg_confidence,
-                       severity=classification.get("severity", "unknown"))
-
-            # Execute workflow using LangGraph or fallback
-            workflow_result = await self.workflow_engine.execute_workflow(classification, context)
+            # Classify message
+            classification = await self.ai_client.classify_message(context.message_text)
             
-            # Generate response from workflow
-            response = await self._generate_workflow_response(workflow_result, classification, context)
+            # Execute workflow
+            workflow_result = await self.workflow_engine.execute_workflow(
+                classification=classification,
+                context=context
+            )
             
-            logger.info("Workflow executed and response generated",
-                       workflow_name=workflow_result.get("name", "none"),
-                       response_length=len(response) if response else 0,
-                       channel_id=context.channel_id,
-                       thread_ts=context.thread_ts)
-
+            # Generate response
+            response = await self._generate_response(
+                workflow_result=workflow_result,
+                classification=classification,
+                context=context
+            )
+            
             return ProcessingResult(
                 response=response,
-                classification=msg_type,  # Use original classification type
-                confidence=msg_confidence,  # Use original confidence
-                workflow_executed=workflow_result.get("executed", False),
-                workflow_name=workflow_result.get("name", ""),
-                escalation_triggered=workflow_result.get("escalation_triggered", False),
-                knowledge_base_used=workflow_result.get("knowledge_base_used", False)
+                classification=classification.get("type", "unknown"),
+                confidence=float(classification.get("confidence", 0.0)),
+                workflow_executed=bool(workflow_result),
+                workflow_type=workflow_result.get("type") if workflow_result else None,
+                error_occurred=False
             )
         except Exception as e:
             logger.exception("Error processing message",
@@ -204,96 +170,46 @@ class MessageProcessor:
             logger.error("Error loading workflow configuration", error=str(e))
             self.flow_config = {"workflows": [], "response_templates": {}}
     
-    def _execute_workflow(self, classification: Dict[str, Any], context: MessageContext) -> Dict[str, Any]:
-        """Execute workflow based on classification."""
-        classification_type = classification.get("type", "unknown")
+    async def _execute_workflow(self, classification: Dict[str, Any], context: MessageContext) -> Dict[str, Any]:
+        """Execute workflow using LangGraph state machine."""
+        msg_type = classification.get("type", "unknown")
         severity = classification.get("severity", "low")
         
-        logger.info("Executing workflow", 
-                   classification_type=classification_type, 
-                   severity=severity)
+        logger.info("Executing workflow", type=msg_type, severity=severity)
         
-        # Find matching workflow
-        matching_workflow = None
-        for workflow in self.flow_config.get("workflows", []):
-            if not workflow.get("enabled", True):
-                continue
-                
-            trigger_conditions = workflow.get("trigger_conditions", {})
-            
-            # Check if classification type matches
-            if trigger_conditions.get("classification_type") == classification_type:
-                # Check severity if specified
-                severity_conditions = trigger_conditions.get("severity", [])
-                if not severity_conditions or severity in severity_conditions:
-                    matching_workflow = workflow
-                    break
+        # Let LangGraph handle the workflow
+        result = await self.workflow_engine.execute_workflow(classification, context)
         
-        if not matching_workflow:
-            logger.info("No matching workflow found", classification_type=classification_type)
+        if not result:
             return {
                 "executed": False,
-                "name": "",
-                "actions_taken": [],
-                "template": None
+                "type": msg_type,
+                "severity": severity,
+                "error": "No matching workflow"
             }
         
-        # Execute workflow actions
-        actions_taken = []
-        escalation_triggered = False
-        knowledge_base_used = False
-        response_template = None
-        
-        for action in matching_workflow.get("actions", []):
-            action_type = action.get("type")
-            actions_taken.append(action_type)
-            
-            if action_type == "escalate":
-                escalation_triggered = True
-            elif action_type == "search_kb":
-                knowledge_base_used = True
-            elif action_type == "respond":
-                response_template = action.get("params", {}).get("template")
-        
-        logger.info("Workflow executed", 
-                   workflow_name=matching_workflow["name"],
-                   actions_taken=actions_taken,
-                   escalation_triggered=escalation_triggered)
-        
+        # Return workflow result
         return {
             "executed": True,
-            "name": matching_workflow["name"],
-            "actions_taken": actions_taken,
-            "escalation_triggered": escalation_triggered,
-            "knowledge_base_used": knowledge_base_used,
-            "template": response_template
+            "type": result.get("type", msg_type),
+            "severity": result.get("severity", severity),
+            "actions": result.get("actions", []),
+            "response": result.get("response")
         }
     
-    async def _generate_workflow_response(self, workflow_result: Dict[str, Any], classification: Dict[str, Any], context: MessageContext) -> str:
-        """Generate response based on workflow result and templates."""
-        # ALWAYS handle knowledge queries with our custom ChromaDB search - bypass template system
-        if classification.get("type") == "knowledge_query":
-            logger.info("Processing knowledge query with custom search", query=context.message_text)
-            return await self._search_knowledge_base(context.message_text)
+    async def _generate_response(self, workflow_result: Dict[str, Any], classification: Dict[str, Any], context: MessageContext) -> str:
+        """Generate response using LangChain."""
+        msg_type = classification.get("type", "unknown")
         
-        if not workflow_result.get("executed", False):
-            # No workflow matched - provide a generic helpful response
-            return "I understand your request. How can I help you further?"
-        
-        template_name = workflow_result.get("template")
-        if not template_name:
-            # No specific template - provide a generic response based on workflow type
-            workflow_name = workflow_result.get("name", "")
-            if "incident" in workflow_name.lower():
-                return "I've received your incident report and am processing it now."
-            elif "support" in workflow_name.lower():
-                return "I've received your support request and will help you resolve it."
-            elif "knowledge" in workflow_name.lower():
-                # This should not happen since we handle knowledge queries above
-                logger.warning("Knowledge workflow reached template logic - this should not happen")
-                return await self._search_knowledge_base(context.message_text)
-            else:
-                return "I've received your message and am processing your request."
+        if msg_type == "knowledge_query":
+            return await self.knowledge_base.search_with_chain(context.message_text)
+            
+        # Use workflow response if available
+        if workflow_result.get("response"):
+            return workflow_result["response"]
+            
+        # Generate fallback response
+        return await self.ai_client.generate_response(context.message_text, classification)
         
         # Skip template processing for knowledge queries (double-check)
         if template_name == "knowledge_base_results":

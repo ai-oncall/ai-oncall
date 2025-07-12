@@ -20,8 +20,8 @@ class AppConfig(BaseSettings):
     slack_socket_mode: bool = False
     slack_channel_id: str = ""
     # Workflow Configuration
-    workflow_config_path: str = "./config/workflows/"
-    default_workflow: str = "general"
+    workflow_config_path: str = "./config/workflows"
+    default_workflow: str = "knowledge_base"  # Default to knowledge base lookup for unknown queries
 
     class Config:
         env_file = ".env"

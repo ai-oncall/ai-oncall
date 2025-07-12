@@ -1,0 +1,16 @@
+name: "support_request"
+type: "state_machine"
+initial_state: "triage"
+states:
+  - name: "triage"
+    next: "create_ticket"
+    conditions:
+      classification_type: "support_request"
+      urgency: ["medium", "low"]
+  - name: "create_ticket"
+    actions:
+      - name: "create_support_ticket"
+      - name: "respond"
+        template: |
+          🎫 Support ticket created: #{ticket_id}
+          Our team will review and respond within 4 hours.

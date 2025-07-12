@@ -1,0 +1,23 @@
+name: "incident_response"
+type: "state_machine"
+initial_state: "classify"
+states:
+  - name: "classify"
+    next: "route"
+    conditions:
+      classification_type: "incident"
+      severity: ["high", "critical"]
+  - name: "route"
+    next: "escalate"
+    actions:
+      - name: "notify"
+        channels: ["#incidents", "#on-call"]
+      - name: "create_ticket"
+        priority: "high"
+  - name: "escalate"
+    actions:
+      - name: "respond"
+        template: |
+          🚨 **Incident Acknowledged**
+          Expected response time: 15 minutes
+          Escalation level: urgent

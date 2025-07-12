@@ -1,0 +1,16 @@
+name: "knowledge_base_lookup"
+type: "retrieval_chain"
+steps:
+  - name: "classify"
+    action: "validate_query"
+  - name: "search"
+    action: "vector_search"
+    params:
+      max_results: 3
+      similarity_threshold: 0.7
+  - name: "generate"
+    action: "generate_response"
+    template: |
+      📚 Found relevant information:
+      {context}
+      Need more help? Feel free to ask!

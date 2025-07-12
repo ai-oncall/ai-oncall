@@ -1,13 +1,16 @@
 workflows:
-  # Incident Response Workflow
+  # Incident Response Workflow (LangGraph State Machine)
   - name: "incident_response"
-    priority: 10
-    enabled: true
-    trigger_conditions:
-      classification_type: "incident"
-      severity: ["high", "critical"]
-    actions:
-      - type: "escalate"
+    type: "state_machine"
+    initial_state: "classify"
+    states:
+      - name: "classify"
+        next: "route"
+        conditions:
+          classification_type: "incident"
+          severity: ["high", "critical"]
+      - name: "route"
+        next: "escalate"
         params:
           escalation_level: "urgent"
           notify_channels: ["#incidents", "#on-call"]
