@@ -1,8 +1,8 @@
-# Knowledge Base Search with ChromaDB
+# Knowledge Base Search with LangChain and ChromaDB
 
 ## Overview
 
-The AI On-Call application uses ChromaDB to vectorize README files and documentation at startup, enabling semantic search to provide relevant answers to user questions.
+The AI On-Call application uses LangChain and ChromaDB to vectorize README files and documentation at startup, enabling semantic search to provide relevant answers to user questions.
 
 ## Process Flow Diagram
 
@@ -10,69 +10,69 @@ The AI On-Call application uses ChromaDB to vectorize README files and documenta
 flowchart TD
     A["🚀 App Startup"] --> B["📂 Scan docs/ folder"]
     B --> C["📄 Read README.md files"]
-    C --> D["💾 Add to ChromaDB<br/>(auto-vectorization)"]
+    C --> D["🔗 Add to LangChain ChromaDB<br/>(auto-vectorization)"]
     D --> E["✅ Ready for queries"]
     
     F["👤 User asks question"] --> G["🤖 AI classifies query"]
     G --> H{"Is it knowledge<br/>related?"}
-    H -->|Yes| I["🔍 Query ChromaDB<br/>(automatic embedding)"]
+    H -->|Yes| I["🔍 Query with LangChain<br/>(retrieval chain)"]
     H -->|No| J["📝 Handle other workflows"]
     
-    I --> K["🔎 Similarity search"]
-    K --> L["📊 Filter results<br/>(>0.7 similarity)"]
-    L --> M["📚 Format response<br/>(with sources)"]
-    M --> N["💬 Send to user"]
+    I --> K["🔎 Similarity search with context"]
+    K --> L["📊 Format response<br/>(with sources)"]
+    L --> M["💬 Send to user"]
     
     E -.-> I
     
     style A fill:#e1f5fe
     style F fill:#f3e5f5
-    style N fill:#e8f5e8
+    style M fill:#e8f5e8
     style D fill:#fff3e0
 ```
 
 ### Simplified Flow
 ```
 🚀 App Startup → 📂 Scan docs/ → 📄 Read README files → 
-💾 Add to ChromaDB (auto-vectorization) → ✅ Ready
+🔗 Add to LangChain ChromaDB (auto-vectorization) → ✅ Ready
 
-👤 User Question → 🤖 Classify query → 🔍 Query ChromaDB → 
-🔎 Similarity search → 📊 Filter results → 📚 Format response → 💬 Send
+👤 User Question → 🤖 Classify query → 🔍 Query with LangChain → 
+🔎 Similarity search → 📚 Format response → 💬 Send
 ```
 
 ## Architecture Components
 
-1. **Knowledge Base Manager** (`src/knowledge/kb_manager.py`) - ChromaDB operations
-2. **Document Processor** (`src/knowledge/document_processor.py`) - File processing and chunking  
-3. **Search Service** (`src/knowledge/search_service.py`) - Vector similarity search
+1. **LangChain Knowledge Manager** (`src/knowledge/langchain_kb_manager.py`) - LangChain and ChromaDB operations
+2. **Document Loader** (`langchain_community.document_loaders`) - File processing
+3. **Retrieval Chain** (`langchain.chains`) - Vector similarity search and response generation
 
 ## Technical Setup
 
 ### Dependencies
 ```toml
 # Add to pyproject.toml
-chromadb = "^0.4.18"
+langchain = "^0.1.20"
+langchain-openai = "^0.1.6"
+langchain-community = "^0.0.38"
+langchain-chroma = "^0.1.0"
 ```
 
 ### Embedding Model
-ChromaDB automatically handles embeddings using its default embedding function (no extra configuration needed):
+LangChain with ChromaDB handles embeddings using OpenAI's models:
 ```python
-import chromadb
+from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
 
-# ChromaDB automatically vectorizes text when you add documents
-client = chromadb.Client()
-collection = client.create_collection(name="knowledge_base")
-
-# Just add text directly - ChromaDB handles the rest!
-collection.add(
-    documents=["Your README content here"],
-    metadatas=[{"filename": "README.md"}],
-    ids=["doc1"]
+# LangChain automatically vectorizes text when you add documents
+vectorstore = Chroma.from_documents(
+    documents=documents,
+    embedding=OpenAIEmbeddings(),
+    persist_directory="chroma_db"
 )
 ```
 
 ### Configuration
 ```python
+# from src/utils/config.py
 class KnowledgeBaseConfig:
     persist_directory: str = "chroma_db"
     collection_name: str = "knowledge_base"
@@ -84,6 +84,8 @@ class KnowledgeBaseConfig:
 
 ### Environment Variables
 ```bash
+# .env file
+OPENAI_API_KEY=your_openai_api_key
 CHROMA_PERSIST_DIRECTORY=chroma_db
 KB_DIRECTORIES=docs/
 SIMILARITY_THRESHOLD=0.7
@@ -94,21 +96,13 @@ MAX_SEARCH_RESULTS=3
 
 ### Document Processing
 - **Input**: README.md files from `docs/` folder
-- **Processing**: Read entire file content as single document
-- **Storage**: Vector + metadata (filename, content, file_path)
+- **Processing**: Load and split documents using LangChain's text splitters.
+- **Storage**: Vector + metadata (filename, content, file_path) in ChromaDB.
 
 ### Response Format
-```
-📚 **Found relevant information:**
-
-**From: filename.md**
-[relevant content]
-
-**From: another-file.md** 
-[relevant content]
-
-Need more help? Feel free to ask!
-```
+- **Retrieval**: The LangChain retrieval chain finds relevant document chunks.
+- **Generation**: A separate language model call generates a response based on the retrieved context.
+- **Output**: A formatted response including the answer and source documents.
 
 ### Workflow Integration
 Existing `config/flow.yaml` already configured:
@@ -144,4 +138,4 @@ Existing `config/flow.yaml` already configured:
 - **Multi-format Support**: Support for PDF, DOCX, and other document formats
 - **Metadata Filtering**: Filter results by document type, date, or tags
 - **Relevance Scoring**: Advanced scoring algorithms for better result ranking
-- **Update Detection**: Automatically re-index when documents change 
+- **Update Detection**: Automatically re-index when documents change

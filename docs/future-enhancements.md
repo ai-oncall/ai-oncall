@@ -3,14 +3,14 @@
 ## 🚀 **Immediate Priority** (Next 1-2 weeks)
 
 ### Phase 1 Foundation - Remaining Items
-- [ ] **Workflow System** - Create `src/workflow/` with flow parser, executor, validator
+- [x] ~~**Workflow System** - Create `src/workflow/` with flow parser, executor, validator~~ (Replaced by LangGraph)
 - [ ] **Custom Exceptions** - Add `src/utils/exceptions.py` and `validators.py`
-- [ ] **Environment Template** - Create `.env.example` file
+- [x] ~~**Environment Template** - Create `.env.example` file~~ (Done)
 
 ### Knowledge Base (Current Focus)
-- [ ] **ChromaDB Integration** - Basic knowledge base search functionality
-- [ ] **Document Processing** - Scan and index README files from `docs/` folder
-- [ ] **Search API** - Integrate with message processor for knowledge queries
+- [x] ~~**ChromaDB Integration** - Basic knowledge base search functionality~~ (Done with LangChain)
+- [x] ~~**Document Processing** - Scan and index README files from `docs/` folder~~ (Done for `knowledge-base/`)
+- [x] ~~**Search API** - Integrate with message processor for knowledge queries~~ (Done)
 
 ## 📋 **Short-term** (1-2 months)
 
@@ -26,14 +26,14 @@
 - [ ] **Update Detection** - Auto-reindex when files change
 
 ### Workflow Enhancements
-- [ ] **External Integrations** - JIRA, ServiceNow, Zendesk APIs
-- [ ] **Conditional Logic** - If/else conditions in workflows
+- [ ] **External Integrations** - JIRA, ServiceNow, Zendesk APIs using LangChain agents
+- [ ] **Conditional Logic** - If/else conditions in workflows (possible with LangGraph)
 - [ ] **Workflow Templates** - Pre-built common scenarios
 
 ## 🎯 **Medium-term** (3-6 months)
 
 ### AI Improvements
-- [ ] **Multi-Model Support** - GPT-4, Claude, local models
+- [ ] **Multi-Model Support** - GPT-4, Claude, local models via LangChain
 - [ ] **Context Awareness** - Conversation history, user preferences
 - [ ] **Response Personalization** - Role-based, tone adaptation
 
@@ -80,4 +80,4 @@
 
 ---
 
-**Next Focus**: ChromaDB Knowledge Base Implementation 🎯 
+**Next Focus**: ChromaDB Knowledge Base Implementation 🎯

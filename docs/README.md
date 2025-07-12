@@ -1,57 +1,23 @@
 # AI OnCall Bot Documentation
 
-Welcome to the AI OnCall Bot project documentation. This bot integrates Slack with OpenAI through phi data lib to provide intelligent request handling based on YAML-defined workflows.
+Welcome to the AI OnCall Bot project documentation. This bot integrates with communication channels like Slack and provides intelligent request handling using LangChain and a knowledge base.
 
 ## 📚 Documentation Structure
 
-### Project Overview
-- [Project Overview](./01-project-overview.md) - High-level project description and goals
-- [Architecture Overview](./02-architecture-overview.md) - System architecture and component interactions
-- [Technology Stack](./03-technology-stack.md) - Detailed technology decisions and rationale
-
-### Development Phases
-- [Phase 1: Foundation Setup](./phases/phase-1-foundation.md) - Project structure and basic setup
-- [Phase 2: Slack Integration](./phases/phase-2-slack-integration.md) - Slack bot implementation
-- [Phase 3: AI Processing](./phases/phase-3-ai-processing.md) - OpenAI and phi data integration
-- [Phase 4: Workflow Engine](./phases/phase-4-workflow-engine.md) - YAML workflow processing
-- [Phase 5: Testing & Quality](./phases/phase-5-testing-quality.md) - Comprehensive testing setup
-- [Phase 6: Deployment & Monitoring](./phases/phase-6-deployment-monitoring.md) - Production deployment
-
-### Technical Documentation
-- [API Reference](./api/README.md) - API endpoints and interfaces
-- [Configuration Guide](./configuration.md) - Environment setup and configuration
-- [Testing Strategy](./testing-strategy.md) - Testing approach and guidelines
-- [Deployment Guide](./deployment.md) - Deployment procedures and requirements
-
-### Development Resources
-- [Contributing Guidelines](./contributing.md) - Development workflow and standards
-- [Troubleshooting](./troubleshooting.md) - Common issues and solutions
-- [Examples](./examples/) - Code examples and usage patterns
+- [**Getting Started**](./01-getting-started.md): How to set up and run the bot.
+- [**Architecture & Technology**](./02-architecture-and-tech.md): A high-level overview of the system architecture and the technologies used.
+- [**Knowledge Base Search**](./03-knowledge-base-search.md): How the bot uses the knowledge base to answer questions.
+- [**LangChain Integration**](./langchain-integration.md): Details on how LangChain is used to orchestrate the AI workflows.
+- [**Future Enhancements**](./future-enhancements.md): A list of potential future improvements.
 
 ## 🚀 Quick Start
 
-1. **Phase 1**: Start with [Foundation Setup](./phases/phase-1-foundation.md)
-2. **Follow sequentially**: Each phase builds on the previous one
-3. **Test thoroughly**: Each phase includes testing requirements
-4. **Review documentation**: Update docs as you implement each phase
+For a quick start, refer to the [Getting Started](./01-getting-started.md) guide.
 
 ## 🎯 Project Goals
 
-- **Intelligent Request Handling**: Classify and route Slack messages using AI
-- **Workflow Automation**: Execute predefined workflows based on request types
-- **High Test Coverage**: Comprehensive testing for reliable development
-- **Scalable Architecture**: Design for production workloads
-- **Developer Productivity**: Fast development cycle with good tooling
-
-## 📋 Current Status
-
-- [ ] Phase 1: Foundation Setup
-- [ ] Phase 2: Slack Integration  
-- [ ] Phase 3: AI Processing
-- [ ] Phase 4: Workflow Engine
-- [ ] Phase 5: Testing & Quality
-- [ ] Phase 6: Deployment & Monitoring
-
-## 🤝 Contributing
-
-See [Contributing Guidelines](./contributing.md) for development workflow, coding standards, and pull request process. 
+- **Intelligent Request Handling**: Classify and route messages using AI.
+- **Workflow Automation**: Execute predefined workflows based on request types.
+- **Knowledge Base Integration**: Provide answers from a knowledge base of markdown files.
+- **Scalable Architecture**: Design for production workloads.
+- **Developer Productivity**: Fast development cycle with good tooling.

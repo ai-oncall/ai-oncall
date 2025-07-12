@@ -4,24 +4,24 @@
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Multi-Channel │    │   AI OnCall     │    │    OpenAI       │
-│   (Slack, Teams,│───▶│      Bot        │───▶│   GPT Models    │
-│   Discord, API) │    │                 │    │                 │
+│   Multi-Channel │    │   AI OnCall     │    │    LangChain      │
+│   (Slack, Teams,│───▶│      Bot        │───▶│   Orchestrator  │
+│   Discord, API) │    │ (LangGraph)     │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │
                               ▼
                        ┌─────────────────┐
-                       │   ChromaDB      │
                        │ Knowledge Base  │
+                       │(ChromaDB/FAISS) │
                        │   (Vector DB)   │
                        └─────────────────┘
 ```
 
 ### Message Flow
 1. **User sends message** → Slack/Teams/API
-2. **Bot processes** → Classifies intent with OpenAI
-3. **Searches knowledge** → ChromaDB vector search
-4. **Generates response** → OpenAI with context
+2. **Bot processes** → Classifies intent with LangChain
+3. **Searches knowledge** → LangChain vector search
+4. **Generates response** → LangChain with context from KB
 5. **Sends reply** → Back to original channel
 
 ## 🛠️ Technology Stack
@@ -33,9 +33,10 @@
 - **WebSocket** - Real-time communication
 
 ### **AI & Knowledge**
+- **LangChain** - Core AI orchestration framework
+- **LangGraph** - For building stateful, multi-step applications
 - **OpenAI GPT** - Language understanding and generation
 - **ChromaDB** - Vector database for document search
-- **Phidata** - AI workflow orchestration
 
 ### **Data & Config**
 - **Pydantic** - Data validation and models
@@ -45,4 +46,4 @@
 ### **Testing & Development**
 - **pytest** - Testing framework
 - **Poetry** - Dependency management
-- **Docker** - Containerization 
+- **Docker** - Containerization
