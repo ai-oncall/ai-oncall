@@ -1,16 +1,68 @@
-name: "knowledge_base_lookup"
-type: "retrieval_chain"
-steps:
-  - name: "classify"
-    action: "validate_query"
-  - name: "search"
-    action: "vector_search"
-    params:
-      max_results: 3
-      similarity_threshold: 0.7
-  - name: "generate"
-    action: "generate_response"
-    template: |
-      📚 Found relevant information:
-      {context}
-      Need more help? Feel free to ask!
+name: "knowledge_base"
+description: "Knowledge base query workflow"
+type: "graph"
+
+nodes:
+  - name: "classify_intent"
+    type: "chain"
+    config:
+      chain_type: "llm_chain"
+      prompt_template: |
+        Analyze the following message and determine if it is a knowledge base query.
+        Message: {message}
+        
+        Return a JSON response with:
+        - is_kb_query: boolean
+        - query: string (the search query to use)
+        - confidence: float (confidence in classification)
+
+  - name: "search_knowledge_base"
+    type: "tool"
+    config:
+      tool_name: "search_kb"
+      input_key: "query"
+      output_key: "kb_results"
+      params:
+        max_results: 3
+        similarity_threshold: 0.7
+
+  - name: "format_response"
+    type: "chain"
+    config:
+      chain_type: "llm_chain"
+      prompt_template: |
+        Given the following knowledge base results and original query,
+        format a helpful response that includes direct quotes and citations.
+        
+        Original query: {query}
+        Knowledge base search results: {kb_results}
+        
+        Format your response as follows:
+        1. Direct answer to the query using knowledge base information
+        2. Supporting context from relevant documents
+        3. Sources cited at the bottom
+        
+        Use markdown formatting for readability.
+
+edges:
+  - from: "classify_intent"
+    to: "search_knowledge_base"
+    condition: "state['classify_intent']['is_kb_query'] == True"
+  
+  - from: "search_knowledge_base"
+    to: "format_response"
+    
+  - from: "format_response"
+    to: "END"
+
+error_handlers:
+  - on: "search_knowledge_base"
+    action: "format_no_results"
+    config:
+      prompt_template: |
+        I searched our knowledge base but couldn't find any relevant information.
+        Could you:
+        1. Rephrase your question, or
+        2. Ask about a different topic?
+        
+        I'll do my best to help!

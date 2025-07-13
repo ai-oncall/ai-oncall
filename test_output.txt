@@ -1,0 +1,308 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.9, pytest-8.4.1, pluggy-1.6.0 -- /Users/mkamar/.pyenv/versions/3.11.9/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall
+configfile: pyproject.toml
+plugins: anyio-4.9.0, langsmith-0.4.4, cov-6.2.1, mock-3.14.1, asyncio-1.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_workflow_creation FAILED [ 20%]
+tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_extract_query_node FAILED [ 40%]
+tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_search_knowledge_base_node FAILED [ 60%]
+tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_format_response_node FAILED [ 80%]
+tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_full_workflow FAILED [100%]
+ERROR: Coverage failure: total of 34 is less than fail-under=60
+
+
+=================================== FAILURES ===================================
+_______________ TestKnowledgeBaseWorkflow.test_workflow_creation _______________
+
+self = <test_knowledge_base_workflow.TestKnowledgeBaseWorkflow object at 0x1083c3110>
+kb_manager = <MagicMock spec='LangChainKnowledgeManager' id='4438794960'>
+
+    def test_workflow_creation(self, kb_manager):
+        """Test that the workflow is created properly."""
+        # Use a patch to avoid StateGraph initialization errors
+        with patch('src.workflows.langgraph_engine.StateGraph') as mock_graph:
+            # Setup the mock
+            mock_instance = MagicMock()
+            mock_graph.return_value = mock_instance
+            mock_instance.compile.return_value = mock_instance
+    
+            # Create the workflow
+            workflow = create_knowledge_base_workflow(kb_manager)
+    
+            # Verify nodes were added
+>           assert mock_instance.add_node.call_count == 3
+E           AssertionError: assert 0 == 3
+E            +  where 0 = <MagicMock name='StateGraph().add_node' id='4451422608'>.call_count
+E            +    where <MagicMock name='StateGraph().add_node' id='4451422608'> = <MagicMock name='StateGraph()' id='4451362832'>.add_node
+
+tests/unit/test_knowledge_base_workflow.py:52: AssertionError
+______________ TestKnowledgeBaseWorkflow.test_extract_query_node _______________
+
+self = <test_knowledge_base_workflow.TestKnowledgeBaseWorkflow object at 0x1094f95d0>
+kb_manager = <MagicMock spec='LangChainKnowledgeManager' id='4432520080'>
+
+    @pytest.mark.asyncio
+    async def test_extract_query_node(self, kb_manager):
+        """Test the extract_query node."""
+        # We'll test the extract_query function directly instead of through the workflow
+        with patch("langchain_core.output_parsers.StrOutputParser") as mock_parser:
+>           with patch('src.workflows.knowledge_base_workflow.extract_query', wraps=None) as mock_extract_query:
+
+tests/unit/test_knowledge_base_workflow.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x1095a7e90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'extract_query'
+
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1419: AttributeError
+__________ TestKnowledgeBaseWorkflow.test_search_knowledge_base_node ___________
+
+self = <test_knowledge_base_workflow.TestKnowledgeBaseWorkflow object at 0x1094f9ed0>
+kb_manager = <MagicMock spec='LangChainKnowledgeManager' id='4451026384'>
+sample_kb_results = [{'content': 'Critical incidents require immediate attention and have a 15-minute SLA.', 'relevance_score': 0.95, 'sou...ELECT name, avg_score FROM students ORDER BY avg_score DESC;', 'relevance_score': 0.85, 'source': 'query_examples.md'}]
+
+    @pytest.mark.asyncio
+    async def test_search_knowledge_base_node(self, kb_manager, sample_kb_results):
+        """Test the search_knowledge_base node."""
+        # Configure mock to return test results
+        kb_manager.search_with_relevance.return_value = sample_kb_results
+    
+        # Use a direct test approach of the function
+>       with patch('src.workflows.knowledge_base_workflow.search_knowledge_base', wraps=None) as mock_search:
+
+tests/unit/test_knowledge_base_workflow.py:93: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x109526a50>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'search_knowledge_base'
+
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1419: AttributeError
+_____________ TestKnowledgeBaseWorkflow.test_format_response_node ______________
+
+self = <test_knowledge_base_workflow.TestKnowledgeBaseWorkflow object at 0x1094fa890>
+kb_manager = <MagicMock spec='LangChainKnowledgeManager' id='4451091984'>
+sample_kb_results = [{'content': 'Critical incidents require immediate attention and have a 15-minute SLA.', 'relevance_score': 0.95, 'sou...ELECT name, avg_score FROM students ORDER BY avg_score DESC;', 'relevance_score': 0.85, 'source': 'query_examples.md'}]
+
+    @pytest.mark.asyncio
+    async def test_format_response_node(self, kb_manager, sample_kb_results):
+        """Test the format_response node."""
+        # Configure KB mock
+        kb_manager.search_with_relevance.return_value = sample_kb_results
+    
+        # Mock the chain output
+        expected_response = (
+            "Critical incidents have a 15-minute SLA for initial response.\n\n"
+            "Source: incident_policies.md"
+        )
+    
+        # Test the format_response function directly
+        with patch("langchain_core.output_parsers.StrOutputParser") as mock_parser:
+>           with patch('src.workflows.knowledge_base_workflow.format_response', wraps=None) as mock_format:
+
+tests/unit/test_knowledge_base_workflow.py:134: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x109524490>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'format_response'
+
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1419: AttributeError
+_________________ TestKnowledgeBaseWorkflow.test_full_workflow _________________
+
+self = <test_knowledge_base_workflow.TestKnowledgeBaseWorkflow object at 0x1094fab50>
+kb_manager = <MagicMock spec='LangChainKnowledgeManager' id='4451177104'>
+sample_kb_results = [{'content': 'Critical incidents require immediate attention and have a 15-minute SLA.', 'relevance_score': 0.95, 'sou...ELECT name, avg_score FROM students ORDER BY avg_score DESC;', 'relevance_score': 0.85, 'source': 'query_examples.md'}]
+
+    @pytest.mark.asyncio
+    async def test_full_workflow(self, kb_manager, sample_kb_results):
+        """Test the complete workflow from start to finish by testing each component individually."""
+        # Configure KB mock
+        kb_manager.search_with_relevance.return_value = sample_kb_results
+    
+        expected_query = "critical incident SLA"
+        expected_response = (
+            "Critical incidents have a 15-minute SLA for initial response.\n\n"
+            "Source: incident_policies.md"
+        )
+    
+        # Mock each component separately and chain them
+        with patch("langchain_core.output_parsers.StrOutputParser") as mock_parser:
+            # Set up the mocked chain returns
+            query_chain = MagicMock()
+            query_chain.invoke.return_value = expected_query
+    
+            response_chain = MagicMock()
+            response_chain.invoke.return_value = expected_response
+    
+            # Configure mock_parser to return different chains based on context
+            def get_chain(*args, **kwargs):
+                # Return appropriate chain based on which one is being created
+                if not hasattr(get_chain, "first_call"):
+                    get_chain.first_call = True
+                    return query_chain
+                else:
+                    return response_chain
+    
+            mock_parser.side_effect = get_chain
+    
+            # Mock each workflow function
+>           with patch('src.workflows.knowledge_base_workflow.extract_query', wraps=None) as mock_extract:
+
+tests/unit/test_knowledge_base_workflow.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x1094f9c10>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'extract_query'
+
+../../../../.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py:1419: AttributeError
+=============================== warnings summary ===============================
+../../../../.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:323
+  /Users/mkamar/.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:323: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.11.9-final-0 _______________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+src/__init__.py                                0      0   100%
+src/ai/__init__.py                             0      0   100%
+src/ai/langchain_client.py                   140    103    26%   57-78, 83-182, 186-212, 218-259, 268-286, 292-308, 313-354, 372, 382, 386
+src/channels/__init__.py                       0      0   100%
+src/channels/channel_interface.py             13      3    77%   13, 18, 23
+src/channels/slack_adapter.py                113     90    20%   26-36, 44-51, 57-83, 87-115, 119-215, 219, 223-230, 243, 248-259
+src/channels/teams_adapter.py                 19     19     0%   3-52
+src/core/__init__.py                           0      0   100%
+src/core/message_processor.py                119     88    26%   29, 34-37, 45-53, 57-63, 67-98, 109-114, 120-149, 155-170, 174-189, 195-212, 227-243, 249-269, 278-297
+src/data/__init__.py                           0      0   100%
+src/data/models.py                            60      1    98%   72
+src/knowledge/__init__.py                      0      0   100%
+src/knowledge/langchain_kb_manager.py        176    139    21%   34-35, 50, 65-76, 80-137, 141-187, 191-217, 223-261, 270-294, 298-314, 318-341, 350-381, 387-415, 419-432, 436-451
+src/main.py                                   83     83     0%   3-201
+src/utils/__init__.py                          0      0   100%
+src/utils/config.py                           23      0   100%
+src/utils/logging.py                          10      0   100%
+src/workflows/__init__.py                      0      0   100%
+src/workflows/knowledge_base_workflow.py      36     10    72%   35-50, 54-58, 62-91
+src/workflows/langgraph_engine.py            186    114    39%   55, 59, 68, 73, 79, 82, 87, 172-194, 205-227, 235-236, 240-251, 255-275, 283-295, 304-332, 341-368, 377-399, 403-412
+------------------------------------------------------------------------
+TOTAL                                        978    650    34%
+Coverage HTML written to dir htmlcov
+FAIL Required test coverage of 60% not reached. Total coverage: 33.54%
+=========================== short test summary info ============================
+FAILED tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_workflow_creation - AssertionError: assert 0 == 3
+ +  where 0 = <MagicMock name='StateGraph().add_node' id='4451422608'>.call_count
+ +    where <MagicMock name='StateGraph().add_node' id='4451422608'> = <MagicMock name='StateGraph()' id='4451362832'>.add_node
+FAILED tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_extract_query_node - AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'extract_query'
+FAILED tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_search_knowledge_base_node - AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'search_knowledge_base'
+FAILED tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_format_response_node - AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'format_response'
+FAILED tests/unit/test_knowledge_base_workflow.py::TestKnowledgeBaseWorkflow::test_full_workflow - AttributeError: <module 'src.workflows.knowledge_base_workflow' from '/Users/mkamar/Non_Work/Projects/ai-oncall/ai-oncall/src/workflows/knowledge_base_workflow.py'> does not have the attribute 'extract_query'
+========================= 5 failed, 1 warning in 0.65s =========================

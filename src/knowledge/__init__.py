@@ -1,1 +1,1 @@
-"""Knowledge base search components.""" 
+"""Knowledge base search components."""

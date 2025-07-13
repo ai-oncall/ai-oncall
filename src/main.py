@@ -1,41 +1,64 @@
 """Main application entry point."""
+
 import asyncio
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from slack_bolt.app.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
+from slack_bolt.app.async_app import AsyncApp
+
+from src.channels.slack_adapter import SlackAdapter
+from src.core.message_processor import MessageProcessor
+from src.data.models import (
+    HealthResponse,
+    MessageContext,
+    MessageRequest,
+    MessageResponse,
+)
+from src.knowledge.langchain_kb_manager import LangChainKnowledgeManager
 from src.utils.config import config
 from src.utils.logging import get_logger
-from src.data.models import MessageRequest, MessageResponse, HealthResponse, MessageContext
-from src.core.message_processor import MessageProcessor
-from src.channels.slack_adapter import SlackAdapter
-from src.knowledge.langchain_kb_manager import LangChainKnowledgeManager
 
 logger = get_logger(__name__)
 
-# Initialize LangChain knowledge base
-try:
-    knowledge_base = LangChainKnowledgeManager()
-    logger.info("LangChain knowledge base initialized")
-    
-    # Load documents from knowledge-base folder at startup
-    files_processed = knowledge_base.bulk_add_from_directory("knowledge-base")
-    if files_processed > 0:
-        logger.info("Knowledge base documents loaded successfully", 
-                   files_processed=files_processed,
-                   collection_info=knowledge_base.get_collection_info())
-    else:
-        logger.warning("No documents found in knowledge-base folder")
 
-except Exception as e:
-    error_msg = f"Failed to initialize LangChain knowledge base: {str(e)}"
-    logger.error(error_msg)
-    raise RuntimeError(error_msg)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown events."""
+    logger.info("Application startup")
+    try:
+        # Initialize LangChain knowledge base
+        knowledge_base = LangChainKnowledgeManager()
+        logger.info("LangChain knowledge base initialized")
 
-# Initialize message processor
-message_processor = MessageProcessor()
+        # Load documents from knowledge-base folder at startup
+        files_processed = knowledge_base.bulk_add_from_directory("knowledge-base")
+        if files_processed > 0:
+            logger.info(
+                "Knowledge base documents loaded successfully",
+                files_processed=files_processed,
+                collection_info=knowledge_base.get_collection_info(),
+            )
+        else:
+            logger.warning("No documents found in knowledge-base folder")
+        
+        app.state.knowledge_base = knowledge_base
+        app.state.message_processor = MessageProcessor()
+
+    except Exception as e:
+        error_msg = f"Failed to initialize LangChain knowledge base during startup: {str(e)}"
+        logger.error(error_msg)
+        # We don't re-raise here, as that would prevent the app from starting.
+        # The health check will report the issue.
+        app.state.knowledge_base = None
+        app.state.message_processor = None
+
+    yield
+    logger.info("Application shutdown")
+
 
 # Initialize Slack app if credentials are configured
 slack_app: AsyncApp | None = None
@@ -43,68 +66,87 @@ slack_handler: AsyncSlackRequestHandler | None = None
 slack_adapter: SlackAdapter | None = None
 
 if config.slack_bot_token:
-    logger.info("Initializing Slack app", 
-                socket_mode=config.slack_socket_mode,
-                channel_id=config.slack_channel_id)
-    
+    logger.info(
+        "Initializing Slack app",
+        socket_mode=config.slack_socket_mode,
+        channel_id=config.slack_channel_id,
+    )
+
     slack_app = AsyncApp(
         token=config.slack_bot_token,
-        signing_secret=config.slack_signing_secret if config.slack_signing_secret else None,
-        process_before_response=True
+        signing_secret=(
+            config.slack_signing_secret if config.slack_signing_secret else None
+        ),
+        process_before_response=True,
     )
-    
+
     if not config.slack_socket_mode:
         slack_handler = AsyncSlackRequestHandler(slack_app)
-    
+
     slack_adapter = SlackAdapter()
 else:
-    logger.warning("Slack credentials not configured, Slack integration will be disabled")
+    logger.warning(
+        "Slack credentials not configured, Slack integration will be disabled"
+    )
 
 # Initialize FastAPI app
 app = FastAPI(
     title="AI OnCall Bot",
     description="Multi-channel AI assistant for support and workflow automation",
     version="0.1.0",
+    lifespan=lifespan,
 )
+
 
 @app.get("/")
 async def root():
     """Root endpoint."""
     return {"message": "AI OnCall Bot - Multi-channel assistant"}
 
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Enhanced health check endpoint."""
+    kb_healthy = getattr(app.state, 'knowledge_base', None) is not None
     return HealthResponse(
-        status="healthy", 
+        status="healthy" if kb_healthy else "degraded",
         version="0.1.0",
         debug=config.debug,
         openai_configured=bool(config.openai_api_key),
         openai_base_url=config.openai_base_url if config.openai_base_url else None,
         slack_configured=bool(config.slack_bot_token and config.slack_signing_secret),
-        timestamp=datetime.now()
+        knowledge_base_initialized=kb_healthy,
+        timestamp=datetime.now(),
     )
 
+
 @app.post("/process-message", response_model=MessageResponse)
-async def process_message(request: MessageRequest):
+async def process_message(message_request: MessageRequest, request: Request):
     """Process an incoming message from any channel."""
     start_time = datetime.now()
-    logger.info("Processing message request", channel_type=request.channel_type)
-    
+    logger.info("Processing message request", channel_type=message_request.channel_type)
+
+    if not request.app.state.message_processor:
+        raise HTTPException(
+            status_code=503,
+            detail="Message processor is not available due to an initialization error.",
+        )
+
     context = MessageContext(
-        user_id=request.user_id,
-        channel_id=request.channel_id,
-        channel_type=request.channel_type,
-        message_text=request.message,
-        thread_ts=request.thread_ts,
-        is_mention=request.is_mention,
-        timestamp=datetime.now()
+        message_id=str(uuid.uuid4()),
+        user_id=message_request.user_id,
+        channel_id=message_request.channel_id,
+        channel_type=message_request.channel_type,
+        message_text=message_request.message,
+        thread_ts=message_request.thread_ts,
+        is_mention=message_request.is_mention,
+        timestamp=datetime.now(),
     )
-    
+
     try:
-        result = await message_processor.process_message(context)
+        result = await request.app.state.message_processor.process_message(context)
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-        
+
         return MessageResponse(
             response_text=result.response,
             classification_type=result.classification,
@@ -114,12 +156,12 @@ async def process_message(request: MessageRequest):
             processing_time_ms=processing_time,
             response_sent=True,
             error_occurred=False,
-            error_message=None
+            error_message=None,
         )
     except Exception as e:
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
         logger.exception("Error processing message")
-        
+
         return MessageResponse(
             response_text=f"Error processing message: {str(e)}",
             classification_type="error",
@@ -129,11 +171,13 @@ async def process_message(request: MessageRequest):
             processing_time_ms=processing_time,
             response_sent=False,
             error_occurred=True,
-            error_message=str(e)
+            error_message=str(e),
         )
+
 
 # Slack webhook endpoint
 if slack_handler:
+
     @app.post("/slack/events")
     async def handle_slack_events(request: Request):
         """Handle incoming Slack events."""
@@ -142,29 +186,56 @@ if slack_handler:
         else:
             raise HTTPException(status_code=503, detail="Slack handler not available")
 
+if slack_app:
+    @slack_app.event("app_mention")
+    async def handle_app_mentions(body, say, request: Request):
+        """Handle mentions of the bot in Slack."""
+        if not request.app.state.message_processor:
+            await say("The bot is currently unavailable due to an error. Please try again later.")
+            return
+
+        event = body["event"]
+        context = MessageContext(
+            message_id=event.get("ts"),
+            user_id=event.get("user"),
+            channel_id=event.get("channel"),
+            channel_type="slack",
+            message_text=event.get("text"),
+            thread_ts=event.get("thread_ts") or event.get("ts"),
+            is_mention=True,
+            timestamp=datetime.fromtimestamp(float(event.get("ts"))),
+            metadata=event,
+        )
+        result = await request.app.state.message_processor.process_message(context)
+        await say(text=result.response, thread_ts=context.thread_ts)
+
+
 async def main():
     """Main application entry point."""
     logger.info("Starting AI OnCall Bot", config_debug=config.debug)
 
     tasks = []
-    
+
     # Start Slack Socket Mode if enabled
     if slack_adapter and config.slack_socket_mode:
         if not config.slack_app_token:
             logger.error("Socket Mode enabled but SLACK_APP_TOKEN is missing")
             raise ValueError("SLACK_APP_TOKEN is required for Socket Mode")
-            
+
+        if not app.state.message_processor:
+            logger.error("Cannot start Socket Mode, MessageProcessor failed to initialize.")
+            return
+
         logger.info("Starting Slack Socket Mode listener in background task")
-        tasks.append(asyncio.create_task(slack_adapter.start_socket_mode(message_processor)))
+        tasks.append(
+            asyncio.create_task(slack_adapter.start_socket_mode(app.state.message_processor))
+        )
     elif slack_adapter:
         logger.info("Running in HTTP webhook mode")
 
     # Start FastAPI server
     config_server = uvicorn.Config(
-        app, 
-        host="0.0.0.0", 
-        port=config.port,
-        log_level=config.log_level.lower()
+        app, host="0.0.0.0", port=config.port, log_level=config.log_level.lower()
     )
     server = uvicorn.Server(config_server)
     tasks.append(asyncio.create_task(server.serve()))
@@ -175,5 +246,17 @@ async def main():
         logger.exception("Error in main execution", error=str(e))
         raise
 
+
+def run():
+    """Run the FastAPI application using uvicorn."""
+    uvicorn.run(
+        "src.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info",
+    )
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run()

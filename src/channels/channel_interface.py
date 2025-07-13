@@ -1,10 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
+
 from src.data.models import MessageContext
+
 
 class ChannelAdapter(ABC):
     @abstractmethod
-    async def send_message(self, context: MessageContext, message: str) -> Dict[str, Any]:
+    async def send_message(
+        self, context: MessageContext, message: str
+    ) -> Dict[str, Any]:
         """Send a message to the channel."""
         pass
 
@@ -16,4 +20,4 @@ class ChannelAdapter(ABC):
     @abstractmethod
     def get_channel_type(self) -> str:
         """Return the channel type identifier (e.g., 'slack', 'teams')."""
-        pass 
+        pass

@@ -1,6 +1,8 @@
 """Logging configuration for the application."""
-import sys
+
 import logging
+import sys
+
 import structlog
 
 from .config import config
@@ -25,9 +27,11 @@ def configure_logging() -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer()
-            if not config.debug
-            else structlog.dev.ConsoleRenderer(colors=True, sort_keys=True),
+            (
+                structlog.processors.JSONRenderer()
+                if not config.debug
+                else structlog.dev.ConsoleRenderer(colors=True, sort_keys=True)
+            ),
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
